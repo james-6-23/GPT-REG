@@ -1,0 +1,138 @@
+{% extends "cpa_base.html" %}
+{% block cpa_content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>远端概览</h2>
+    <div class="metric-grid wide">
+      <div class="metric"><span>CPA账号总数</span><strong id="ov-remote-total">-</strong></div>
+      <div class="metric"><span>Codex账号数</span><strong id="ov-codex-total">-</strong></div>
+      <div class="metric"><span>健康 / 受限</span><strong id="ov-healthy">-</strong></div>
+      <div class="metric"><span>未知 / 不可用</span><strong id="ov-risky">-</strong></div>
+      <div class="metric"><span>禁用账号</span><strong id="ov-disabled">-</strong></div>
+      <div class="metric"><span>未检测</span><strong id="ov-untested">-</strong></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px;">
+      <button class="btn primary" type="button" onclick="refreshOverview()">刷新概览</button>
+      <button class="btn secondary" type="button" onclick="runSiteTest()">测试站点</button>
+      <button class="btn secondary" type="button" onclick="syncPending()">同步本地待上传账号</button>
+    </div>
+    <div class="info-box" id="ov-message" style="margin-top:12px;">正在加载...</div>
+  </div>
+  <div class="panel">
+    <h2>本地同步状态</h2>
+    <div class="metric-grid">
+      <div class="metric"><span>本地记录</span><strong id="local-total">-</strong></div>
+      <div class="metric"><span>已同步</span><strong id="local-synced">-</strong></div>
+      <div class="metric"><span>待同步</span><strong id="local-pending">-</strong></div>
+      <div class="metric"><span>同步中</span><strong id="local-syncing">-</strong></div>
+      <div class="metric"><span>失败</span><strong id="local-failed">-</strong></div>
+      <div class="metric"><span>手动 / 关闭</span><strong id="local-other">-</strong></div>
+    </div>
+    <div class="kv-list" style="margin-top:12px;">
+      <div><label>最近站点测试</label><code id="ov-site-test">-</code></div>
+      <div><label>健康探测模式</label><code id="ov-probe-mode">-</code></div>
+    </div>
+  </div>
+</section>
+
+<section class="grid two-col">
+  <div class="panel">
+    <h2>最近同步记录</h2>
+    <table>
+      <thead><tr><th>邮箱</th><th>状态</th><th>时间</th><th>说明</th></tr></thead>
+      <tbody id="sync-body">
+        <tr><td colspan="4" class="muted">正在加载...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>CPA账号预览</h2>
+    <table>
+      <thead><tr><th>名称</th><th>邮箱</th><th>健康</th><th>状态</th></tr></thead>
+      <tbody id="remote-body">
+        <tr><td colspan="4" class="muted">正在加载...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function renderOverview(data) {
+    const remoteStats = data.remote_stats || {};
+    const localStats = data.local_stats || {};
+    const siteTest = data.site_test || {};
+    const accounts = data.accounts || [];
+    const recentSyncs = data.recent_syncs || [];
+
+    document.getElementById("ov-remote-total").textContent = data.remote_total ?? 0;
+    document.getElementById("ov-codex-total").textContent = data.codex_total ?? 0;
+    document.getElementById("ov-healthy").textContent = `${remoteStats.healthy ?? 0} / ${remoteStats.limited ?? 0}`;
+    document.getElementById("ov-risky").textContent = `${remoteStats.unknown ?? 0} / ${remoteStats.unusable ?? 0}`;
+    document.getElementById("ov-disabled").textContent = remoteStats.disabled ?? 0;
+    document.getElementById("ov-untested").textContent = remoteStats.untested ?? 0;
+
+    document.getElementById("local-total").textContent = localStats.total ?? 0;
+    document.getElementById("local-synced").textContent = localStats.synced ?? 0;
+    document.getElementById("local-pending").textContent = localStats.pending ?? 0;
+    document.getElementById("local-syncing").textContent = localStats.syncing ?? 0;
+    document.getElementById("local-failed").textContent = localStats.failed ?? 0;
+    document.getElementById("local-other").textContent = `${localStats.manual ?? 0} / ${localStats.off ?? 0}`;
+
+    document.getElementById("ov-message").textContent = data.message || "-";
+    document.getElementById("ov-site-test").textContent =
+      siteTest.checked_at ? `${siteTest.checked_at} ｜ ${siteTest.message || "-"} ｜ 账号数=${siteTest.remote_total ?? "-"}` : "暂无站点测试记录";
+    document.getElementById("ov-probe-mode").textContent = data.health_probe_mode || "-";
+
+    document.getElementById("sync-body").innerHTML = recentSyncs.length ? recentSyncs.map(item => `
+      <tr>
+        <td>${item.email || "-"}</td>
+        <td>${item.cpa_sync_status || "-"}</td>
+        <td>${item.cpa_synced_at || "-"}</td>
+        <td>${item.cpa_sync_message || "-"}</td>
+      </tr>
+    `).join("") : `<tr><td colspan="4" class="muted">暂无同步记录</td></tr>`;
+
+    document.getElementById("remote-body").innerHTML = accounts.length ? accounts.map(item => `
+      <tr>
+        <td><code>${item.name || "-"}</code></td>
+        <td>${item.email || "-"}</td>
+        <td>${item.health_status || "未检测"}</td>
+        <td>${item.status || "-"}${item.disabled ? " / disabled" : ""}</td>
+      </tr>
+    `).join("") : `<tr><td colspan="4" class="muted">暂无 CPA 账号</td></tr>`;
+  }
+
+  async function refreshOverview() {
+    const resp = await api("/api/cpa/overview");
+    renderOverview(resp.data || {});
+  }
+
+  async function runSiteTest() {
+    try {
+      await api("/api/cpa/test", { method: "POST" });
+      showToast("CPA 站点测试成功");
+      await refreshOverview();
+    } catch (err) {
+      showToast(err.message || "测试失败", "error");
+      await refreshOverview().catch(() => {});
+    }
+  }
+
+  async function syncPending() {
+    try {
+      const resp = await api("/api/cpa/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data = resp.data || {};
+      showToast(`同步完成：成功 ${data.success ?? 0}，失败 ${data.failed ?? 0}`);
+      await refreshOverview();
+    } catch (err) {
+      showToast(err.message || "同步失败", "error");
+    }
+  }
+
+  refreshOverview().catch(err => showToast(err.message || "加载失败", "error"));
+  window.setInterval(() => {
+    refreshOverview().catch(() => {});
+  }, 8000);
+</script>
+{% endblock %}

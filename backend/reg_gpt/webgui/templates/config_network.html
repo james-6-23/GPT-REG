@@ -1,0 +1,66 @@
+{% extends "config_base.html" %}
+{% block config_content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>网络设置</h2>
+    <p class="panel-desc">代理现在可以显式关闭。关闭后会直连，不会删除你已填的代理地址。</p>
+    <form id="network-form" class="form-grid">
+      <div class="field checkbox-group span-2">
+        <label><input id="network-enabled" type="checkbox" /> 启用代理</label>
+      </div>
+      <div class="field span-2">
+        <label>代理地址</label>
+        <input id="network-proxy" type="text" placeholder="例如 http://127.0.0.1:7890" />
+      </div>
+      <div class="toolbar span-2">
+        <button class="btn primary" type="submit">保存网络配置</button>
+        <button class="btn secondary" type="button" onclick="loadNetwork()">重新加载</button>
+      </div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>说明</h2>
+    <div class="kv-list">
+      <div><label>当前模式</label><code id="network-summary">-</code></div>
+      <div><label>提示</label><code>关闭代理后，主程序会以直连模式启动。</code></div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function fillNetwork(data) {
+    const network = data.network || {};
+    document.getElementById("network-enabled").checked = !!network.enabled;
+    document.getElementById("network-proxy").value = network.proxy || "";
+    document.getElementById("network-summary").textContent = network.enabled && network.proxy ? network.proxy : "直连";
+  }
+
+  async function loadNetwork() {
+    const resp = await api("/api/config/network");
+    fillNetwork(resp.data || {});
+  }
+
+  document.getElementById("network-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config/network", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network: {
+            enabled: document.getElementById("network-enabled").checked,
+            proxy: document.getElementById("network-proxy").value.trim(),
+          },
+        }),
+      });
+      fillNetwork(resp.data || {});
+      showToast("网络配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadNetwork().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

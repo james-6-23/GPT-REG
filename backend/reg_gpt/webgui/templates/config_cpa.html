@@ -1,0 +1,176 @@
+{% extends "config_base.html" %}
+{% block config_content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>CPA连接配置</h2>
+    <p class="panel-desc">这里配置 CLIProxyAPI / CPA 管理接口。默认关闭；关闭时 CPA 管理页会提示先开启。</p>
+    <form id="cpa-form" class="form-grid">
+      <div class="field span-2">
+        <label class="inline-check">
+          <input id="cpa-enabled" type="checkbox" />
+          启用 CPA 管理
+        </label>
+      </div>
+      <div class="field span-2">
+        <label>管理地址</label>
+        <input id="cpa-management-url" type="text" placeholder="例如：http://127.0.0.1:8317/v0/management" />
+      </div>
+      <div class="field span-2">
+        <label>管理密钥</label>
+        <input id="cpa-management-token" type="password" placeholder="Bearer Token" />
+      </div>
+      <div class="field">
+        <label>上传代理模式</label>
+        <select id="cpa-upload-proxy-mode">
+          <option value="default">沿用主程序代理</option>
+          <option value="direct">强制直连</option>
+          <option value="custom">自定义代理</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>自定义代理</label>
+        <input id="cpa-custom-proxy" type="text" placeholder="仅 custom 模式使用" />
+      </div>
+      <div class="field">
+        <label>基础超时（秒）</label>
+        <input id="cpa-timeout" type="number" min="1" />
+      </div>
+      <div class="field">
+        <label>健康探测模式</label>
+        <select id="cpa-health-probe-mode">
+          <option value="auto">auto（双通道）</option>
+          <option value="openai">openai（仅 /v1/models）</option>
+          <option value="codex">codex（仅 wham）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="inline-check">
+          <input id="cpa-active-probe" type="checkbox" />
+          启用主动探测
+        </label>
+      </div>
+      <div class="field">
+        <label class="inline-check">
+          <input id="cpa-auto-sync" type="checkbox" />
+          注册成功后自动同步到 CPA
+        </label>
+      </div>
+      <div class="field">
+        <label>探测超时（秒）</label>
+        <input id="cpa-probe-timeout" type="number" min="1" />
+      </div>
+      <div class="field">
+        <label>探测并发数</label>
+        <input id="cpa-probe-workers" type="number" min="1" />
+      </div>
+      <div class="field">
+        <label>删除并发数</label>
+        <input id="cpa-delete-workers" type="number" min="1" />
+      </div>
+      <div class="field">
+        <label>最大主动探测数</label>
+        <input id="cpa-max-active-probes" type="number" min="0" />
+      </div>
+      <div class="toolbar span-2">
+        <button class="btn primary" type="submit">保存 CPA 配置</button>
+        <button class="btn secondary" type="button" onclick="loadCpaConfig()">重新加载</button>
+        <button class="btn secondary" type="button" onclick="testCpaSite()">测试站点</button>
+      </div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>测试结果</h2>
+    <div class="kv-list">
+      <div><label>状态</label><code id="cpa-test-message">尚未测试</code></div>
+      <div><label>标准化地址</label><code id="cpa-test-url">-</code></div>
+      <div><label>账号数量</label><code id="cpa-test-total">-</code></div>
+      <div><label>响应时间</label><code id="cpa-test-latency">-</code></div>
+      <div><label>检测时间</label><code id="cpa-test-checked-at">-</code></div>
+    </div>
+    <div class="info-box" style="margin-top:12px;">
+      建议填写管理根地址，例如：
+      <code>http://127.0.0.1:8317/v0/management</code>
+      <br />
+      也兼容直接填写：
+      <code>/auth-files</code>、<code>/api-call</code>、<code>management.html</code> 形式，系统会自动标准化。
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function fillCpaConfig(data) {
+    const cpa = data.cpa || {};
+    document.getElementById("cpa-enabled").checked = !!cpa.enabled;
+    document.getElementById("cpa-management-url").value = cpa.management_url || "";
+    document.getElementById("cpa-management-token").value = cpa.management_token || "";
+    document.getElementById("cpa-upload-proxy-mode").value = cpa.upload_proxy_mode || "default";
+    document.getElementById("cpa-custom-proxy").value = cpa.custom_proxy || "";
+    document.getElementById("cpa-timeout").value = cpa.timeout || 15;
+    document.getElementById("cpa-active-probe").checked = !!cpa.active_probe;
+    document.getElementById("cpa-auto-sync").checked = !!cpa.auto_sync_on_success;
+    document.getElementById("cpa-probe-timeout").value = cpa.probe_timeout || 8;
+    document.getElementById("cpa-probe-workers").value = cpa.probe_workers || 12;
+    document.getElementById("cpa-delete-workers").value = cpa.delete_workers || 8;
+    document.getElementById("cpa-max-active-probes").value = cpa.max_active_probes || 120;
+    document.getElementById("cpa-health-probe-mode").value = cpa.health_probe_mode || "auto";
+  }
+
+  async function loadCpaConfig() {
+    const resp = await api("/api/config/cpa");
+    fillCpaConfig(resp.data || {});
+  }
+
+  function fillTestResult(data) {
+    document.getElementById("cpa-test-message").textContent = data.message || "-";
+    document.getElementById("cpa-test-url").textContent = data.management_url || "-";
+    document.getElementById("cpa-test-total").textContent = data.remote_total ?? "-";
+    document.getElementById("cpa-test-latency").textContent = data.response_time_ms ? `${data.response_time_ms} ms` : "-";
+    document.getElementById("cpa-test-checked-at").textContent = data.checked_at || "-";
+  }
+
+  async function testCpaSite() {
+    try {
+      const resp = await api("/api/cpa/test", { method: "POST" });
+      fillTestResult(resp.data || {});
+      showToast("CPA 站点测试成功");
+    } catch (err) {
+      fillTestResult({ message: err.message || "测试失败" });
+      showToast(err.message || "测试失败", "error");
+    }
+  }
+
+  document.getElementById("cpa-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config/cpa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cpa: {
+            enabled: document.getElementById("cpa-enabled").checked,
+            management_url: document.getElementById("cpa-management-url").value.trim(),
+            management_token: document.getElementById("cpa-management-token").value.trim(),
+            upload_proxy_mode: document.getElementById("cpa-upload-proxy-mode").value,
+            custom_proxy: document.getElementById("cpa-custom-proxy").value.trim(),
+            timeout: Number(document.getElementById("cpa-timeout").value || 15),
+            active_probe: document.getElementById("cpa-active-probe").checked,
+            probe_timeout: Number(document.getElementById("cpa-probe-timeout").value || 8),
+            probe_workers: Number(document.getElementById("cpa-probe-workers").value || 12),
+            delete_workers: Number(document.getElementById("cpa-delete-workers").value || 8),
+            max_active_probes: Number(document.getElementById("cpa-max-active-probes").value || 120),
+            auto_sync_on_success: document.getElementById("cpa-auto-sync").checked,
+            health_probe_mode: document.getElementById("cpa-health-probe-mode").value,
+          },
+        }),
+      });
+      fillCpaConfig(resp.data || {});
+      showToast("CPA 配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadCpaConfig().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

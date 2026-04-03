@@ -1,0 +1,13 @@
+services:
+  reg-gpt:
+    container_name: reg-gpt
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /opt/reg-gpt
+    command: ["python", "-u", "openai_reg.py"]
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    volumes:
+      - /Server/Docker/reg-gpt:/opt/reg-gpt/runtime

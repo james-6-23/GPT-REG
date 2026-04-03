@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>运行摘要</h2>
+    <div class="metric-grid">
+      <div class="metric"><span>Token 文件</span><strong id="token-count">-</strong></div>
+      <div class="metric"><span>账号记录</span><strong id="accounts-count">-</strong></div>
+      <div class="metric"><span>并发数</span><strong id="workers-value">-</strong></div>
+      <div class="metric"><span>成功目标</span><strong id="max-success">-</strong></div>
+      <div class="metric"><span>总尝试</span><strong id="attempts-count">-</strong></div>
+      <div class="metric"><span>成功 / 失败</span><strong id="sf-count">-</strong></div>
+    </div>
+    <div class="info-box" id="summary-line">正在加载摘要...</div>
+    <div class="info-box" id="runtime-box" style="margin-top:12px;">正在加载运行状态...</div>
+  </div>
+  <div class="panel">
+    <h2>路径信息</h2>
+    <div class="kv-list">
+      <div><label>程序目录</label><code id="path-script">-</code></div>
+      <div><label>主入口文件</label><code id="path-entry">-</code></div>
+      <div><label>配置文件</label><code id="path-config">-</code></div>
+      <div><label>Token 目录</label><code id="path-token">-</code></div>
+      <div><label>账号文件</label><code id="path-accounts">-</code></div>
+      <div><label>运行日志</label><code id="path-runtime-log">-</code></div>
+      <div><label>运行状态文件</label><code id="path-runtime-state">-</code></div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>最近输出</h2>
+  <table>
+    <thead>
+      <tr><th>文件名</th><th>大小</th><th>更新时间</th></tr>
+    </thead>
+    <tbody id="recent-token-body">
+      <tr><td colspan="3" class="muted">正在加载...</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function formatSize(size) {
+    const n = Number(size || 0);
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  }
+
+  async function loadDashboard() {
+    const resp = await api("/api/dashboard");
+    const data = resp.data || {};
+    const summary = data.summary || {};
+    const paths = data.paths || {};
+    const runtime = data.runtime || {};
+    const recent = data.recent_tokens || [];
+
+    document.getElementById("token-count").textContent = summary.token_count ?? 0;
+    document.getElementById("accounts-count").textContent = summary.accounts_count ?? 0;
+    document.getElementById("workers-value").textContent = summary.workers ?? "-";
+    document.getElementById("max-success").textContent = summary.max_success ?? "-";
+    document.getElementById("attempts-count").textContent = summary.attempts ?? 0;
+    document.getElementById("sf-count").textContent = `${summary.successes ?? 0} / ${summary.failures ?? 0}`;
+    document.getElementById("summary-line").textContent =
+      `代理：${summary.proxy || "直连"} ｜ 已启用邮箱通道：${summary.email_enabled ?? 0} ｜ 等待区间：${summary.sleep_window || "-"} ｜ 配置更新时间：${summary.config_updated_at || "未知"}`;
+
+    document.getElementById("path-script").textContent = paths.script_dir || "-";
+    document.getElementById("path-entry").textContent = paths.entry_script || "-";
+    document.getElementById("path-config").textContent = paths.config_path || "-";
+    document.getElementById("path-token").textContent = paths.token_dir || "-";
+    document.getElementById("path-accounts").textContent = paths.accounts_csv || "-";
+    document.getElementById("path-runtime-log").textContent = paths.runtime_log || "-";
+    document.getElementById("path-runtime-state").textContent = paths.runtime_state || "-";
+    document.getElementById("runtime-box").textContent =
+      runtime.running
+        ? `主程序运行中 ｜ 阶段=${runtime.phase || "-"} ｜ PID=${runtime.pid || "-"} ｜ 活跃Worker=${runtime.workers_active ?? 0} ｜ 最近成功邮箱=${runtime.last_email || "-"} ｜ 启动时间=${runtime.started_at || "-"}`
+        : `主程序未运行 ｜ 阶段=${runtime.phase || "-"} ｜ 最近退出码=${runtime.last_exit_code ?? "-"} ｜ ${runtime.message || ""}`;
+
+    const tbody = document.getElementById("recent-token-body");
+    if (!recent.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="muted">暂无输出文件</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = recent.map(item => `
+      <tr>
+        <td><code>${item.name}</code></td>
+        <td>${formatSize(item.size)}</td>
+        <td>${item.modified_at}</td>
+      </tr>
+    `).join("");
+  }
+
+  loadDashboard().catch(err => showToast(err.message || "加载失败", "error"));
+  window.setInterval(() => {
+    loadDashboard().catch(() => {});
+  }, 4000);
+</script>
+{% endblock %}

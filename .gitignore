@@ -1,0 +1,33 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+
+# === Node.js ===
+node_modules/
+frontend/dist/
+
+# === 用户私有配置（含密钥，不入库） ===
+reg_config.toml
+
+# === Runtime data ===
+backend/runtime/logs/
+backend/runtime/state/
+backend/runtime/data/
+
+# === OS / IDE ===
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+
+# === Excluded directories ===
+admin 2/

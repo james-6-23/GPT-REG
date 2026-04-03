@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>运行控制</h2>
+    <div class="metric-grid wide">
+      <div class="metric"><span>当前阶段</span><strong id="phase-value">-</strong></div>
+      <div class="metric"><span>总尝试</span><strong id="attempts-value">0</strong></div>
+      <div class="metric"><span>成功数</span><strong id="successes-value">0</strong></div>
+      <div class="metric"><span>失败数</span><strong id="failures-value">0</strong></div>
+      <div class="metric"><span>活跃 Worker</span><strong id="workers-active-value">0</strong></div>
+      <div class="metric"><span>目标数量</span><strong id="max-success-value">0</strong></div>
+    </div>
+    <div class="info-box" id="control-message">正在读取当前阶段说明...</div>
+    <div class="action-grid" id="control-actions" style="margin-top:12px;"></div>
+    <div class="kv-list compact-kv" style="margin-top:12px;">
+      <div><label>进程信息</label><code id="control-meta">PID：-</code></div>
+      <div><label>运行模式</label><code id="control-mode">-</code></div>
+      <div><label>代理 / 等待区间</label><code id="control-network">-</code></div>
+      <div><label>最近成功邮箱</label><code id="control-email">-</code></div>
+      <div><label>主入口文件</label><code id="control-entry">-</code></div>
+      <div><label>状态文件</label><code id="control-state-file">-</code></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>最近事件</h2>
+    <div class="event-list" id="control-events">
+      <div class="event-item muted">正在加载...</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Worker 状态槽</h2>
+  <div class="worker-grid" id="worker-grid">
+    <div class="worker-card muted">正在加载 Worker 状态...</div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[ch]));
+  }
+
+  function statusLabel(status) {
+    const map = {
+      idle: "空闲",
+      running: "执行中",
+      success: "成功",
+      failed: "失败",
+      sleeping: "等待中",
+      stopped: "已停止",
+    };
+    return map[status] || status || "未知";
+  }
+
+  async function postAction(action) {
+    if (action === "logs/delete" && !window.confirm("确认删除运行日志吗？运行中的主程序会清空当前日志内容。")) {
+      return;
+    }
+    try {
+      const resp = await api(`/api/control/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      showToast(resp.message || "操作成功");
+      await loadControl();
+    } catch (err) {
+      showToast(err.message || "操作失败", "error");
+    }
+  }
+
+  async function loadControl() {
+    const resp = await api("/api/control");
+    const data = resp.data || {};
+    document.getElementById("control-message").textContent = data.message || "暂无说明";
+    document.getElementById("phase-value").textContent = data.phase || "-";
+    document.getElementById("attempts-value").textContent = data.attempts ?? 0;
+    document.getElementById("successes-value").textContent = data.successes ?? 0;
+    document.getElementById("failures-value").textContent = data.failures ?? 0;
+    document.getElementById("workers-active-value").textContent = `${data.workers_active ?? 0}/${data.workers_target ?? 0}`;
+    document.getElementById("max-success-value").textContent = data.max_success ?? 0;
+    document.getElementById("control-meta").textContent =
+      `PID：${data.pid || "-"} ｜ 启动时间：${data.started_at || "-"} ｜ 最近退出码：${data.last_exit_code ?? "-"}`;
+    document.getElementById("control-mode").textContent =
+      `${data.mode || "-"} ｜ 单次运行：${data.once ? "是" : "否"}`;
+    document.getElementById("control-network").textContent =
+      `${data.proxy || "直连"} ｜ ${data.sleep_window || "-"}`;
+    document.getElementById("control-email").textContent = data.last_email || "-";
+    document.getElementById("control-entry").textContent = data.entry_script || "-";
+    document.getElementById("control-state-file").textContent = data.runtime_state_path || "-";
+    const el = document.getElementById("control-actions");
+    el.innerHTML = (data.actions || []).map(item => `
+      <button class="btn ${item.enabled ? (item.variant || "primary") : "secondary"}" ${item.enabled ? `onclick="postAction('${item.id}')"` : "disabled"}>
+        ${item.label}
+      </button>
+    `).join("");
+
+    const eventEl = document.getElementById("control-events");
+    const events = data.recent_events || [];
+    eventEl.innerHTML = events.length ? events.slice(-12).reverse().map(item => `
+      <div class="event-item">
+        <strong>${escapeHtml(item.timestamp || "-")}</strong>
+        <span>${escapeHtml(item.message || "")}</span>
+      </div>
+    `).join("") : `<div class="event-item muted">暂无最近事件</div>`;
+
+    const workerEl = document.getElementById("worker-grid");
+    const workers = data.worker_slots || [];
+    workerEl.innerHTML = workers.length ? workers.map(item => `
+      <div class="worker-card">
+        <div class="worker-header">
+          <strong>W${item.worker_id || "-"}</strong>
+          <span class="status-pill ${escapeHtml(item.status || "idle")}">${escapeHtml(statusLabel(item.status))}</span>
+        </div>
+        <div class="worker-meta">尝试 #${item.attempt ?? 0} ｜ 更新时间：${escapeHtml(item.updated_at || "-")}</div>
+        <div class="worker-meta">邮箱：${escapeHtml(item.email || "-")}</div>
+        <pre class="mono-list">${escapeHtml((item.lines || []).join("\n") || "暂无实时步骤输出")}</pre>
+      </div>
+    `).join("") : `<div class="worker-card muted">暂无 Worker 状态</div>`;
+  }
+
+  loadControl().catch(err => showToast(err.message || "加载失败", "error"));
+  window.setInterval(() => {
+    loadControl().catch(() => {});
+  }, 2500);
+</script>
+{% endblock %}

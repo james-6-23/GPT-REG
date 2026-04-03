@@ -1,0 +1,91 @@
+{% extends "config_base.html" %}
+{% block config_content %}
+<section class="panel">
+  <h2>运行设置</h2>
+  <p class="panel-desc">控制主程序工作线程、等待区间、邮箱 OTP 超时与单次运行等参数。</p>
+  <form id="runtime-form" class="form-grid">
+    <div class="field">
+      <label>最短等待（秒）</label>
+      <input id="runtime-sleep-min" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>最长等待（秒）</label>
+      <input id="runtime-sleep-max" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>成功目标</label>
+      <input id="runtime-max-success" type="number" min="0" />
+    </div>
+    <div class="field">
+      <label>并发数</label>
+      <input id="runtime-workers" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>验证码等待超时（秒）</label>
+      <input id="runtime-otp-timeout" type="number" min="10" />
+    </div>
+    <div class="field">
+      <label>验证码重试超时（秒）</label>
+      <input id="runtime-otp-retry-timeout" type="number" min="10" />
+    </div>
+    <div class="field checkbox-group span-2">
+      <label><input id="runtime-once" type="checkbox" /> 单次运行后自动停止</label>
+    </div>
+    <div class="toolbar span-2">
+      <button class="btn primary" type="submit">保存运行配置</button>
+      <button class="btn secondary" type="button" onclick="loadRuntime()">重新加载</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function fillRuntime(data) {
+    const run = data.run || {};
+    const otp = ((data.email || {}).otp) || {};
+    document.getElementById("runtime-sleep-min").value = run.sleep_min ?? 5;
+    document.getElementById("runtime-sleep-max").value = run.sleep_max ?? 30;
+    document.getElementById("runtime-max-success").value = run.max_success ?? 0;
+    document.getElementById("runtime-workers").value = run.workers ?? 1;
+    document.getElementById("runtime-otp-timeout").value = otp.wait_timeout_seconds ?? 120;
+    document.getElementById("runtime-otp-retry-timeout").value = otp.retry_wait_timeout_seconds ?? 60;
+    document.getElementById("runtime-once").checked = !!run.once;
+  }
+
+  async function loadRuntime() {
+    const resp = await api("/api/config/runtime");
+    fillRuntime(resp.data || {});
+  }
+
+  document.getElementById("runtime-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config/runtime", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          run: {
+            sleep_min: Number(document.getElementById("runtime-sleep-min").value || 5),
+            sleep_max: Number(document.getElementById("runtime-sleep-max").value || 30),
+            max_success: Number(document.getElementById("runtime-max-success").value || 0),
+            workers: Number(document.getElementById("runtime-workers").value || 1),
+            once: document.getElementById("runtime-once").checked,
+          },
+          email: {
+            otp: {
+              wait_timeout_seconds: Number(document.getElementById("runtime-otp-timeout").value || 120),
+              retry_wait_timeout_seconds: Number(document.getElementById("runtime-otp-retry-timeout").value || 60),
+            },
+          },
+        }),
+      });
+      fillRuntime(resp.data || {});
+      showToast("运行配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadRuntime().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

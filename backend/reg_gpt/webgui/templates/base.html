@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title }} · Reg-GPT WebGUI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">RG</div>
+        <div>
+          <strong>Reg-GPT</strong>
+          <p>主程序控制台</p>
+        </div>
+      </div>
+      <nav class="nav">
+        {% for item in nav_items %}
+          <a class="nav-link {% if request.endpoint == item.endpoint or (item.match_prefix and request.endpoint and request.endpoint.startswith(item.match_prefix)) %}active{% endif %}" href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-tip">
+        当前已与 <code>Program/Reg-GPT</code> 主程序解耦，未混用 <code>Source/Web</code> 验证码服务。
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="page-header">
+        <div>
+          <h1>{{ page_title }}</h1>
+          <p>当前 WebUI 已按功能分区，配置、运行控制、日志与结果查看彼此分离，便于后续继续扩展。</p>
+        </div>
+        <div class="header-actions">
+          {% if current_user %}
+          <form method="post" action="{{ url_for('logout_page') }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button class="btn secondary" type="submit">退出登录（{{ current_user }}）</button>
+          </form>
+          {% endif %}
+          <button class="btn secondary" type="button" onclick="window.location.reload()">刷新页面</button>
+        </div>
+      </header>
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script>
+    window.APP_CSRF_TOKEN = "{{ csrf_token }}";
+
+    function showToast(message, type = "success") {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.className = `toast show ${type}`;
+      window.clearTimeout(showToast._timer);
+      showToast._timer = window.setTimeout(() => {
+        el.className = "toast";
+      }, 2200);
+    }
+
+    async function api(url, options = {}) {
+      const opts = { ...options };
+      opts.headers = Object.assign({}, options.headers || {});
+      const method = (opts.method || "GET").toUpperCase();
+      if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+        opts.headers["X-CSRF-Token"] = window.APP_CSRF_TOKEN;
+      }
+      const resp = await fetch(url, opts);
+      const data = await resp.json();
+      if (!resp.ok || data.status === "error") {
+        throw new Error(data.message || `请求失败：${resp.status}`);
+      }
+      return data;
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

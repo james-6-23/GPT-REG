@@ -1,0 +1,132 @@
+# ============================================================
+#  Reg-GPT 默认配置模板
+#  首次启动或 Docker 部署时自动复制为正式配置
+# ============================================================
+
+[email]
+selection_mode = "first_enabled"
+
+[email.otp]
+wait_timeout_seconds = 120
+retry_wait_timeout_seconds = 60
+
+[email.weight]
+default_score = 100
+min_score = 20
+max_score = 200
+success_delta = 8
+failure_delta = 20
+
+[email.providers.mailapi_pool]
+enabled = false
+type = "mailapi_pool"
+label = "域名池邮箱"
+
+[[email.providers.mailapi_pool.entries]]
+enabled = false
+label = "默认条目"
+api_base = "https://mailapi.example.com"
+api_bases = ["https://mailapi.example.com"]
+api_key = ""
+domains = ["example.com"]
+
+[email.providers.cfmail]
+enabled = false
+type = "cfmail"
+label = "CFMail 账号池"
+profile = "auto"
+fail_threshold = 3
+cooldown_seconds = 1800
+
+[email.providers.cloudflare]
+enabled = false
+type = "cloudflare"
+label = "Cloudflare 邮箱"
+worker_url = ""
+email_domain = ""
+api_secret = ""
+
+[email.providers.duckmail]
+enabled = false
+type = "duckmail"
+label = "DuckMail"
+
+[[email.providers.duckmail.entries]]
+enabled = false
+label = "默认条目"
+api_base = "https://api.duckmail.sbs"
+bearer = ""
+email_domain = "duckmail.sbs"
+
+[email.providers.tempmail_lol]
+enabled = false
+type = "tempmail_lol"
+label = "TempMail.lol"
+
+[[email.providers.tempmail_lol.entries]]
+enabled = false
+label = "默认条目"
+api_base = "https://api.tempmail.lol/v2"
+
+[email.providers.lamail]
+enabled = false
+type = "lamail"
+label = "LaMail"
+
+[[email.providers.lamail.entries]]
+enabled = false
+label = "默认条目"
+api_base = "https://maliapi.215.im/v1"
+api_key = ""
+domain = ""
+
+[network]
+enabled = false
+proxy = ""
+
+[cpa]
+enabled = false
+management_url = ""
+management_token = ""
+upload_proxy_mode = "default"
+custom_proxy = ""
+timeout = 15
+active_probe = true
+probe_timeout = 8
+probe_workers = 12
+delete_workers = 8
+max_active_probes = 120
+auto_sync_on_success = true
+health_probe_mode = "auto"
+
+[run]
+sleep_min = 5
+sleep_max = 30
+max_success = 0
+workers = 1
+once = false
+
+[webui]
+host = "0.0.0.0"
+port = 25666
+
+[oauth]
+enabled = true
+host = "127.0.0.1"
+port = 1455
+timeout = 300
+mock = false
+
+[security]
+username = "admin"
+password_hash = ""
+api_token = ""
+session_secret = ""
+session_minutes = 480
+secure_cookie = false
+login_rate_limit = 8
+login_window_seconds = 900
+csrf_enabled = true
+# trusted_origins 不是监听地址，而是浏览器来源白名单。
+# 如通过服务器 IP 或域名访问，请把对应地址补充到这里。
+trusted_origins = ["http://127.0.0.1", "http://localhost"]

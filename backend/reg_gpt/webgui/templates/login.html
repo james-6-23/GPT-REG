@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title }} · Reg-GPT WebGUI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="login-body">
+  <div class="login-shell">
+    <div class="login-card">
+      <div class="brand" style="margin-bottom: 18px;">
+        <div class="brand-mark">RG</div>
+        <div>
+          <strong>Reg-GPT</strong>
+          <p>安全登录后才能访问主程序控制台</p>
+        </div>
+      </div>
+
+      {% if error_message %}
+      <div class="alert error">{{ error_message }}</div>
+      {% endif %}
+
+      <form method="post" class="login-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="field">
+          <label>用户名</label>
+          <input type="text" name="username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input type="password" name="password" autocomplete="current-password" required />
+        </div>
+        <button class="btn primary" type="submit">登录</button>
+      </form>
+
+      <div class="info-box" style="margin-top: 16px;">
+        首次自动生成密码时，只会在当前启动终端显示一次初始凭据，不再额外写出 bootstrap 文件。<br />
+        所有持久配置统一保存在 <code>Program/Reg-GPT/reg_config.toml</code>，公网部署前请先完成 <code>[webui]</code> 和 <code>[security]</code> 配置加固。
+      </div>
+    </div>
+  </div>
+</body>
+</html>

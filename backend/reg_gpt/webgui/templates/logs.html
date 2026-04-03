@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>运行日志</h2>
+    <div class="toolbar" style="margin-bottom:12px;">
+      <button class="btn secondary" type="button" onclick="loadLogs()">手动刷新</button>
+      <label class="inline-check"><input type="checkbox" id="auto-scroll" checked /> 自动滚动到底部</label>
+    </div>
+    <div class="kv-list compact-kv" style="margin-bottom:12px;">
+      <div><label>日志文件</label><code id="logs-path">-</code></div>
+      <div><label>状态文件</label><code id="state-path">-</code></div>
+      <div><label>最近更新时间</label><code id="logs-updated-at">-</code></div>
+    </div>
+    <pre class="log-box" id="log-box">正在读取日志...</pre>
+  </div>
+
+  <div class="panel">
+    <h2>事件流摘要</h2>
+    <div class="info-box" id="logs-phase">当前阶段：-</div>
+    <div class="event-list" id="event-box" style="margin-top:12px;">
+      <div class="event-item muted">正在加载...</div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[ch]));
+  }
+
+  async function loadLogs() {
+    const resp = await api("/api/logs?limit=300");
+    const data = resp.data || {};
+    const logBox = document.getElementById("log-box");
+    logBox.textContent = (data.lines || []).join("\n");
+    document.getElementById("logs-path").textContent = data.log_file || "-";
+    document.getElementById("state-path").textContent = data.state_file || "-";
+    document.getElementById("logs-updated-at").textContent = data.updated_at || "-";
+    document.getElementById("logs-phase").textContent = `当前阶段：${data.phase || "-"} ｜ 是否运行：${data.running ? "运行中" : "未运行"}`;
+
+    const events = data.recent_events || [];
+    document.getElementById("event-box").innerHTML = events.length ? events.slice(-20).reverse().map(item => `
+      <div class="event-item">
+        <strong>${escapeHtml(item.timestamp || "-")}</strong>
+        <span>${escapeHtml(item.message || "")}</span>
+      </div>
+    `).join("") : `<div class="event-item muted">暂无事件摘要</div>`;
+
+    if (document.getElementById("auto-scroll").checked) {
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+  }
+
+  loadLogs().catch(err => showToast(err.message || "加载失败", "error"));
+  window.setInterval(() => {
+    loadLogs().catch(() => {});
+  }, 2500);
+</script>
+{% endblock %}

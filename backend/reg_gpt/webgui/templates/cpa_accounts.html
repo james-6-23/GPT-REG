@@ -1,0 +1,555 @@
+{% extends "cpa_base.html" %}
+{% block cpa_content %}
+<section class="panel">
+  <div class="toolbar">
+    <button class="btn primary" type="button" onclick="loadAccounts(1)">刷新账号列表</button>
+    <button class="btn secondary" type="button" onclick="checkSelected()">检测选中健康</button>
+    <button class="btn secondary" type="button" onclick="cleanupSelected()">直接清理已标记不可用</button>
+    <button class="btn secondary" type="button" onclick="viewUnusableAndSelect()">仅看不可用并全选</button>
+    <button class="btn secondary" type="button" onclick="disableSelected()">禁用选中</button>
+    <button class="btn secondary" type="button" onclick="enableSelected()">启用选中</button>
+    <button class="btn secondary" type="button" onclick="deleteSelected()">删除选中</button>
+  </div>
+  <div class="pagination-bar" style="margin-top:12px;">
+    <div class="pagination-group">
+      <label class="muted" for="per-page-input">每页数量</label>
+      <input id="per-page-input" class="inline-input" type="number" min="1" max="500" value="50" />
+      <button class="btn secondary small-btn" type="button" onclick="applyPerPage()">应用</button>
+    </div>
+    <div class="pagination-group">
+      <label class="muted" for="health-filter-select">健康筛选</label>
+      <select id="health-filter-select" class="inline-input" style="min-width: 130px;">
+        <option value="">全部状态</option>
+        <option value="untested">未检测</option>
+        <option value="healthy">healthy</option>
+        <option value="limited">limited</option>
+        <option value="unknown">unknown</option>
+        <option value="unusable">unusable</option>
+      </select>
+    </div>
+    <div class="pagination-group">
+      <label class="muted" for="provider-filter-select">Provider</label>
+      <select id="provider-filter-select" class="inline-input" style="min-width: 130px;">
+        <option value="">全部 Provider</option>
+      </select>
+    </div>
+    <div class="pagination-group">
+      <label class="muted" for="disabled-filter-select">启用状态</label>
+      <select id="disabled-filter-select" class="inline-input" style="min-width: 120px;">
+        <option value="">全部状态</option>
+        <option value="enabled">仅启用中</option>
+        <option value="disabled">仅已禁用</option>
+      </select>
+    </div>
+    <div class="pagination-group">
+      <label class="muted" for="keyword-input">名称/邮箱</label>
+      <input id="keyword-input" class="inline-input" type="text" placeholder="支持模糊搜索" style="min-width: 160px;" />
+      <button class="btn secondary small-btn" type="button" onclick="applyFilters()">应用筛选</button>
+    </div>
+    <div class="pagination-group">
+      <button id="page-prev-btn" class="btn secondary small-btn" type="button" onclick="goPrevPage()">上一页</button>
+      <input id="page-input" class="inline-input" type="number" min="1" value="1" />
+      <button class="btn secondary small-btn" type="button" onclick="goPage()">跳转</button>
+      <button id="page-next-btn" class="btn secondary small-btn" type="button" onclick="goNextPage()">下一页</button>
+      <span id="page-meta" class="muted">第 1 / 1 页，共 0 条</span>
+    </div>
+  </div>
+  <div class="info-box" id="accounts-message" style="margin-top:12px;">正在加载账号列表...</div>
+</section>
+
+<section class="panel">
+  <h2>健康任务状态</h2>
+  <div class="status-grid">
+    <div class="metric"><span>当前阶段</span><strong id="task-stage">未开始</strong></div>
+    <div class="metric"><span>检测进度</span><strong id="task-progress-text">0%</strong></div>
+    <div class="metric"><span>线程数</span><strong id="task-workers">-</strong></div>
+    <div class="metric"><span>代理</span><strong id="task-proxy">直连</strong></div>
+    <div class="metric"><span>检测范围</span><strong id="task-scope">全部账号</strong></div>
+    <div class="metric"><span>当前计数</span><strong id="task-counter">0 / 0</strong></div>
+  </div>
+  <div class="progress-track" style="margin-top:12px;">
+    <div id="task-progress-bar" class="progress-fill" style="width:0%;"></div>
+  </div>
+  <div class="info-box" id="task-message" style="margin-top:12px;">尚未执行健康检测任务</div>
+</section>
+
+<section class="panel">
+  <h2>CPA账号列表</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th><input id="check-all" type="checkbox" /></th>
+          <th>名称</th>
+          <th>邮箱</th>
+          <th>Provider</th>
+          <th>健康</th>
+          <th>状态</th>
+          <th>计划</th>
+          <th>账号ID</th>
+          <th>优先级</th>
+          <th>备注</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="accounts-body">
+        <tr><td colspan="11" class="muted">正在加载...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  const STORAGE_PAGE_KEY = "cpa.accounts.page";
+  const STORAGE_PER_PAGE_KEY = "cpa.accounts.perPage";
+  const STORAGE_HEALTH_FILTER_KEY = "cpa.accounts.healthFilter";
+  const STORAGE_PROVIDER_FILTER_KEY = "cpa.accounts.providerFilter";
+  const STORAGE_DISABLED_FILTER_KEY = "cpa.accounts.disabledFilter";
+  const STORAGE_KEYWORD_FILTER_KEY = "cpa.accounts.keywordFilter";
+
+  let CPA_ACCOUNTS = [];
+  let ACCOUNT_PAGINATION = {
+    page: 1,
+    per_page: 50,
+    total: 0,
+    total_pages: 1,
+    has_prev: false,
+    has_next: false,
+  };
+  let ACCOUNT_FILTERS = {
+    health_status: "",
+    provider: "",
+    disabled_state: "",
+    keyword: "",
+  };
+  let ACCOUNT_FILTER_OPTIONS = {
+    providers: [],
+  };
+  let HEALTH_STATUS = {};
+  let healthPollTimer = null;
+  let lastTaskRunning = false;
+  let pendingSelectVisible = false;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function normalizeNumber(value, fallback, min = 1, max = 500) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.min(max, Math.max(min, Math.trunc(num)));
+  }
+
+  function loadStoredPagination() {
+    const perPage = normalizeNumber(window.localStorage.getItem(STORAGE_PER_PAGE_KEY), 50, 1, 500);
+    const page = normalizeNumber(window.localStorage.getItem(STORAGE_PAGE_KEY), 1, 1, 999999);
+    const healthStatus = String(window.localStorage.getItem(STORAGE_HEALTH_FILTER_KEY) || "").trim().toLowerCase();
+    const provider = String(window.localStorage.getItem(STORAGE_PROVIDER_FILTER_KEY) || "").trim().toLowerCase();
+    const disabledState = String(window.localStorage.getItem(STORAGE_DISABLED_FILTER_KEY) || "").trim().toLowerCase();
+    const keyword = String(window.localStorage.getItem(STORAGE_KEYWORD_FILTER_KEY) || "").trim();
+    ACCOUNT_PAGINATION.per_page = perPage;
+    ACCOUNT_PAGINATION.page = page;
+    ACCOUNT_FILTERS.health_status = healthStatus;
+    ACCOUNT_FILTERS.provider = provider;
+    ACCOUNT_FILTERS.disabled_state = disabledState;
+    ACCOUNT_FILTERS.keyword = keyword;
+    document.getElementById("per-page-input").value = perPage;
+    document.getElementById("page-input").value = page;
+    document.getElementById("health-filter-select").value = healthStatus;
+    document.getElementById("provider-filter-select").value = provider;
+    document.getElementById("disabled-filter-select").value = disabledState;
+    document.getElementById("keyword-input").value = keyword;
+  }
+
+  function savePagination() {
+    window.localStorage.setItem(STORAGE_PAGE_KEY, String(ACCOUNT_PAGINATION.page || 1));
+    window.localStorage.setItem(STORAGE_PER_PAGE_KEY, String(ACCOUNT_PAGINATION.per_page || 50));
+    window.localStorage.setItem(STORAGE_HEALTH_FILTER_KEY, ACCOUNT_FILTERS.health_status || "");
+    window.localStorage.setItem(STORAGE_PROVIDER_FILTER_KEY, ACCOUNT_FILTERS.provider || "");
+    window.localStorage.setItem(STORAGE_DISABLED_FILTER_KEY, ACCOUNT_FILTERS.disabled_state || "");
+    window.localStorage.setItem(STORAGE_KEYWORD_FILTER_KEY, ACCOUNT_FILTERS.keyword || "");
+  }
+
+  function renderProviderOptions(providers) {
+    const select = document.getElementById("provider-filter-select");
+    const current = ACCOUNT_FILTERS.provider || "";
+    const items = Array.isArray(providers) ? providers : [];
+    select.innerHTML = `
+      <option value="">全部 Provider</option>
+      ${items.map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("")}
+    `;
+    select.value = items.includes(current) ? current : "";
+    if (select.value !== current) {
+      ACCOUNT_FILTERS.provider = select.value;
+    }
+  }
+
+  function syncFiltersFromInputs() {
+    ACCOUNT_FILTERS.health_status = String(document.getElementById("health-filter-select").value || "").trim().toLowerCase();
+    ACCOUNT_FILTERS.provider = String(document.getElementById("provider-filter-select").value || "").trim().toLowerCase();
+    ACCOUNT_FILTERS.disabled_state = String(document.getElementById("disabled-filter-select").value || "").trim().toLowerCase();
+    ACCOUNT_FILTERS.keyword = String(document.getElementById("keyword-input").value || "").trim();
+  }
+
+  function selectedNames() {
+    return Array.from(document.querySelectorAll(".cpa-check:checked")).map(el => el.value);
+  }
+
+  function accountIdText(item) {
+    const token = item.id_token || {};
+    return token.chatgpt_account_id || item.account || "-";
+  }
+
+  function planText(item) {
+    const token = item.id_token || {};
+    return token.plan_type || item.account_type || "-";
+  }
+
+  function applyVisibleSelection(predicate) {
+    const checkboxes = Array.from(document.querySelectorAll(".cpa-check"));
+    let checkedCount = 0;
+    checkboxes.forEach((el, index) => {
+      const item = CPA_ACCOUNTS[index];
+      const matched = Boolean(item && predicate(item));
+      el.checked = matched;
+      if (matched) checkedCount += 1;
+    });
+    document.getElementById("check-all").checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
+    return checkedCount;
+  }
+
+  function renderAccounts(data) {
+    const accounts = data.accounts || [];
+    const pagination = data.pagination || {};
+    const filters = data.filters || {};
+    const filterOptions = data.filter_options || {};
+    CPA_ACCOUNTS = accounts;
+    ACCOUNT_PAGINATION = {
+      page: pagination.page || 1,
+      per_page: pagination.per_page || ACCOUNT_PAGINATION.per_page || 50,
+      total: pagination.total || 0,
+      total_pages: pagination.total_pages || 1,
+      has_prev: Boolean(pagination.has_prev),
+      has_next: Boolean(pagination.has_next),
+    };
+    ACCOUNT_FILTERS.health_status = String(filters.health_status || ACCOUNT_FILTERS.health_status || "").trim().toLowerCase();
+    ACCOUNT_FILTERS.provider = String(filters.provider || ACCOUNT_FILTERS.provider || "").trim().toLowerCase();
+    ACCOUNT_FILTERS.disabled_state = String(filters.disabled_state || ACCOUNT_FILTERS.disabled_state || "").trim().toLowerCase();
+    ACCOUNT_FILTERS.keyword = String(filters.keyword || ACCOUNT_FILTERS.keyword || "").trim();
+    ACCOUNT_FILTER_OPTIONS.providers = Array.isArray(filterOptions.providers) ? filterOptions.providers : [];
+    savePagination();
+
+    document.getElementById("per-page-input").value = ACCOUNT_PAGINATION.per_page;
+    document.getElementById("page-input").value = ACCOUNT_PAGINATION.page;
+    document.getElementById("health-filter-select").value = ACCOUNT_FILTERS.health_status;
+    document.getElementById("disabled-filter-select").value = ACCOUNT_FILTERS.disabled_state;
+    document.getElementById("keyword-input").value = ACCOUNT_FILTERS.keyword;
+    renderProviderOptions(ACCOUNT_FILTER_OPTIONS.providers);
+    document.getElementById("page-meta").textContent =
+      `第 ${ACCOUNT_PAGINATION.page} / ${ACCOUNT_PAGINATION.total_pages} 页，共 ${ACCOUNT_PAGINATION.total} 条`;
+    document.getElementById("page-prev-btn").disabled = !ACCOUNT_PAGINATION.has_prev;
+    document.getElementById("page-next-btn").disabled = !ACCOUNT_PAGINATION.has_next;
+    document.getElementById("accounts-message").textContent = data.message || "CPA 账号列表加载成功";
+    document.getElementById("check-all").checked = false;
+
+    const tbody = document.getElementById("accounts-body");
+    if (!CPA_ACCOUNTS.length) {
+      const emptyText = ACCOUNT_FILTERS.health_status
+        ? `当前筛选（${ACCOUNT_FILTERS.health_status}）下暂无 CPA 账号`
+        : "当前页暂无 CPA 账号";
+      tbody.innerHTML = `<tr><td colspan="11" class="muted">${emptyText}</td></tr>`;
+      if (pendingSelectVisible) {
+        pendingSelectVisible = false;
+      }
+      return;
+    }
+
+    tbody.innerHTML = CPA_ACCOUNTS.map((item, index) => `
+      <tr>
+        <td><input class="cpa-check" type="checkbox" value="${escapeHtml(item.name || "")}" /></td>
+        <td><code>${escapeHtml(item.name || "-")}</code></td>
+        <td>${escapeHtml(item.email || "-")}</td>
+        <td>${escapeHtml(item.provider || item.type || "-")}</td>
+        <td>${escapeHtml(item.health_status || "未检测")}<br /><span class="muted">${escapeHtml(item.health_checked_at || "")}</span></td>
+        <td>${escapeHtml(item.status || "-")}${item.disabled ? "<br /><span class='muted'>disabled</span>" : ""}</td>
+        <td>${escapeHtml(planText(item))}</td>
+        <td><code>${escapeHtml(accountIdText(item))}</code></td>
+        <td><input class="table-input table-input-sm" id="priority-${index}" type="number" min="0" value="${escapeHtml(item.priority ?? "")}" /></td>
+        <td><input class="table-input" id="note-${index}" type="text" value="${escapeHtml(item.note || "")}" /></td>
+        <td>
+          <div class="mini-toolbar">
+            <button class="btn secondary small-btn" type="button" onclick="saveFields(${index})">保存</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+
+    if (pendingSelectVisible) {
+      pendingSelectVisible = false;
+      const checked = applyVisibleSelection(item => String(item.health_status || "").trim().toLowerCase() === "unusable");
+      showToast(checked ? `已勾选当前页 ${checked} 个不可用账号` : "当前页没有不可用账号", checked ? "success" : "error");
+    }
+  }
+
+  function renderHealthTask(task) {
+    HEALTH_STATUS = task || {};
+    const progressPercent = Number(HEALTH_STATUS.progress_percent || 0);
+    const progressCurrent = Number(HEALTH_STATUS.progress_current || 0);
+    const progressTotal = Number(HEALTH_STATUS.progress_total || 0);
+    const scopeText = HEALTH_STATUS.selected_total
+      ? `选中 ${HEALTH_STATUS.selected_total} 个账号`
+      : "全部账号";
+
+    document.getElementById("task-stage").textContent = HEALTH_STATUS.stage_label || "未开始";
+    document.getElementById("task-progress-text").textContent = `${progressPercent}%`;
+    document.getElementById("task-workers").textContent = HEALTH_STATUS.probe_workers ? `${HEALTH_STATUS.probe_workers} 检测 / ${HEALTH_STATUS.delete_workers || 0} 清理` : "-";
+    document.getElementById("task-proxy").textContent = HEALTH_STATUS.proxy_label || "直连";
+    document.getElementById("task-scope").textContent = scopeText;
+    document.getElementById("task-counter").textContent = `${progressCurrent} / ${progressTotal}`;
+    document.getElementById("task-progress-bar").style.width = `${progressPercent}%`;
+    document.getElementById("task-message").textContent = HEALTH_STATUS.message || "尚未执行健康检测任务";
+  }
+
+  function startHealthPoller() {
+    if (healthPollTimer) return;
+    healthPollTimer = window.setInterval(() => {
+      refreshHealthStatus(true).catch(() => {});
+    }, 2000);
+  }
+
+  function stopHealthPoller() {
+    if (!healthPollTimer) return;
+    window.clearInterval(healthPollTimer);
+    healthPollTimer = null;
+  }
+
+  async function refreshHealthStatus(silent = false) {
+    try {
+      const resp = await api("/api/cpa/health/status");
+      const task = resp.data || {};
+      renderHealthTask(task);
+      if (task.running) {
+        startHealthPoller();
+      } else {
+        stopHealthPoller();
+      }
+      if (lastTaskRunning && !task.running) {
+        await loadAccounts(ACCOUNT_PAGINATION.page);
+      }
+      lastTaskRunning = Boolean(task.running);
+      return task;
+    } catch (err) {
+      if (!silent) {
+        showToast(err.message || "读取健康任务状态失败", "error");
+      }
+      throw err;
+    }
+  }
+
+  async function loadAccounts(page = ACCOUNT_PAGINATION.page, forceReload = false) {
+    const pageValue = normalizeNumber(page, ACCOUNT_PAGINATION.page || 1, 1, 999999);
+    const perPageValue = normalizeNumber(document.getElementById("per-page-input").value, ACCOUNT_PAGINATION.per_page || 50, 1, 500);
+    ACCOUNT_PAGINATION.page = pageValue;
+    ACCOUNT_PAGINATION.per_page = perPageValue;
+    savePagination();
+
+    const params = new URLSearchParams({
+      page: String(pageValue),
+      per_page: String(perPageValue),
+    });
+    if (ACCOUNT_FILTERS.health_status) {
+      params.set("health_status", ACCOUNT_FILTERS.health_status);
+    }
+    if (ACCOUNT_FILTERS.provider) {
+      params.set("provider", ACCOUNT_FILTERS.provider);
+    }
+    if (ACCOUNT_FILTERS.disabled_state) {
+      params.set("disabled_state", ACCOUNT_FILTERS.disabled_state);
+    }
+    if (ACCOUNT_FILTERS.keyword) {
+      params.set("keyword", ACCOUNT_FILTERS.keyword);
+    }
+    if (forceReload) {
+      params.set("force_reload", "1");
+    }
+
+    const resp = await api(`/api/cpa/accounts?${params.toString()}`);
+    const data = resp.data || {};
+    renderAccounts(data);
+    if (data.ok === false) {
+      showToast(data.message || "加载 CPA 账号失败", "error");
+    }
+  }
+
+  async function saveFields(index) {
+    const item = CPA_ACCOUNTS[index];
+    if (!item || !item.name) {
+      showToast("未找到待保存账号", "error");
+      return;
+    }
+    try {
+      const priorityValue = document.getElementById(`priority-${index}`).value.trim();
+      const noteValue = document.getElementById(`note-${index}`).value;
+      await api("/api/cpa/accounts/fields", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: item.name,
+          priority: priorityValue === "" ? 0 : Number(priorityValue),
+          note: noteValue,
+        }),
+      });
+      showToast(`已保存 ${item.name}`);
+      await loadAccounts(ACCOUNT_PAGINATION.page);
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  }
+
+  async function startHealthTask(payload, successMessage) {
+    try {
+      const resp = await api("/api/cpa/health/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const task = resp.data || {};
+      renderHealthTask(task);
+      lastTaskRunning = Boolean(task.running);
+      if (task.running) {
+        startHealthPoller();
+      }
+      showToast(task.started === false ? "已有健康任务正在运行，已切换到当前进度" : successMessage);
+    } catch (err) {
+      showToast(err.message || "启动健康任务失败", "error");
+    }
+  }
+
+  async function runBulk(url, payload, successMessage) {
+    const names = payload.names || [];
+    if (!names.length) {
+      showToast("请先选择账号", "error");
+      return;
+    }
+    try {
+      await api(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      showToast(successMessage);
+      await loadAccounts(ACCOUNT_PAGINATION.page);
+    } catch (err) {
+      showToast(err.message || "操作失败", "error");
+    }
+  }
+
+  async function checkSelected() {
+    const names = selectedNames();
+    if (!names.length) {
+      showToast("请先选择账号", "error");
+      return;
+    }
+    await startHealthTask({ names }, "已启动选中账号健康检测");
+  }
+
+  async function cleanupSelected() {
+    const names = selectedNames();
+    if (!names.length) {
+      showToast("请先选择账号", "error");
+      return;
+    }
+    try {
+      const resp = await api("/api/cpa/health/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names }),
+      });
+      const data = resp.data || {};
+      showToast(data.message || `已直接清理 ${data.deleted_total || 0} 个已标记不可用账号`);
+      await Promise.all([
+        loadAccounts(ACCOUNT_PAGINATION.page),
+        refreshHealthStatus(true),
+      ]);
+    } catch (err) {
+      showToast(err.message || "直接清理失败", "error");
+    }
+  }
+
+  async function disableSelected() {
+    await runBulk("/api/cpa/accounts/toggle", { names: selectedNames(), disabled: true }, "已禁用选中账号");
+  }
+
+  async function enableSelected() {
+    await runBulk("/api/cpa/accounts/toggle", { names: selectedNames(), disabled: false }, "已启用选中账号");
+  }
+
+  async function deleteSelected() {
+    await runBulk("/api/cpa/accounts/delete", { names: selectedNames() }, "已删除选中账号");
+  }
+
+  function applyPerPage() {
+    document.getElementById("page-input").value = "1";
+    loadAccounts(1).catch(err => showToast(err.message || "分页更新失败", "error"));
+  }
+
+  function applyFilters() {
+    syncFiltersFromInputs();
+    document.getElementById("page-input").value = "1";
+    loadAccounts(1).catch(err => showToast(err.message || "筛选失败", "error"));
+  }
+
+  function viewUnusableAndSelect() {
+    document.getElementById("health-filter-select").value = "unusable";
+    syncFiltersFromInputs();
+    pendingSelectVisible = true;
+    document.getElementById("page-input").value = "1";
+    loadAccounts(1).catch(err => {
+      pendingSelectVisible = false;
+      showToast(err.message || "不可用账号筛选失败", "error");
+    });
+  }
+
+  function goPrevPage() {
+    if (!ACCOUNT_PAGINATION.has_prev) return;
+    loadAccounts(ACCOUNT_PAGINATION.page - 1).catch(err => showToast(err.message || "翻页失败", "error"));
+  }
+
+  function goNextPage() {
+    if (!ACCOUNT_PAGINATION.has_next) return;
+    loadAccounts(ACCOUNT_PAGINATION.page + 1).catch(err => showToast(err.message || "翻页失败", "error"));
+  }
+
+  function goPage() {
+    const pageValue = normalizeNumber(document.getElementById("page-input").value, ACCOUNT_PAGINATION.page || 1, 1, 999999);
+    loadAccounts(pageValue).catch(err => showToast(err.message || "跳转失败", "error"));
+  }
+
+  document.addEventListener("change", (event) => {
+    if (event.target && event.target.id === "check-all") {
+      document.querySelectorAll(".cpa-check").forEach(el => {
+        el.checked = event.target.checked;
+      });
+    }
+  });
+
+  document.getElementById("keyword-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyFilters();
+    }
+  });
+
+  loadStoredPagination();
+  Promise.all([
+    loadAccounts(ACCOUNT_PAGINATION.page, true),
+    refreshHealthStatus(true),
+  ]).catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

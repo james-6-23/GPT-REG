@@ -1,0 +1,210 @@
+{% extends "config_base.html" %}
+{% block config_content %}
+<section class="panel">
+  <h2>邮箱域名权重</h2>
+  <p class="panel-desc">展示当前参与注册的固定域名或域名模式。你可以在这里调整权重规则、单独禁用某个域名，或重置其历史权重。</p>
+  <form id="email-domain-form" class="form-grid">
+    <div class="field">
+      <label>初始权重</label>
+      <input id="email-weight-default-score" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>最低权重</label>
+      <input id="email-weight-min-score" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>最高权重</label>
+      <input id="email-weight-max-score" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>成功增量</label>
+      <input id="email-weight-success-delta" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>失败减量</label>
+      <input id="email-weight-failure-delta" type="number" min="1" />
+    </div>
+    <div class="kv-list compact-kv">
+      <div><label>已记录域名</label><code id="email-weight-count">0</code></div>
+      <div><label>当前启用域名</label><code id="email-weight-enabled-count">0</code></div>
+      <div><label>最高权重</label><code id="email-weight-max">0</code></div>
+      <div><label>最低权重</label><code id="email-weight-min">0</code></div>
+      <div><label>平均权重</label><code id="email-weight-avg">0</code></div>
+    </div>
+    <div class="toolbar span-2">
+      <button class="btn primary" type="submit">保存权重配置</button>
+      <button class="btn secondary" type="button" onclick="loadEmailDomains()">重新加载</button>
+      <button class="btn secondary" type="button" onclick="resetAllWeights()">重置全部权重</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>域名列表</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>域名</th>
+          <th>来源</th>
+          <th>状态</th>
+          <th>权重</th>
+          <th>成功</th>
+          <th>失败</th>
+          <th>最近结果</th>
+          <th>最近原因</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="email-domain-weight-table">
+        <tr><td colspan="9" class="muted">正在加载域名列表...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function esc(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function statusText(item) {
+    const value = String((item || {}).last_result || "").trim();
+    if (value === "success") return "成功";
+    if (value === "failure") return "失败";
+    return "-";
+  }
+
+  function domainStateText(item) {
+    if (!(item || {}).config_enabled) return "条目已禁用";
+    return item.active ? "已启用" : "手动禁用";
+  }
+
+  async function resetWeight(key) {
+    try {
+      const resp = await api("/api/email/weights/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      showToast(resp.message || "权重已重置");
+      await loadEmailDomains();
+    } catch (err) {
+      showToast(err.message || "重置失败", "error");
+    }
+  }
+
+  async function resetAllWeights() {
+    if (!window.confirm("确认重置所有邮箱域名的动态权重吗？")) return;
+    try {
+      const resp = await api("/api/email/weights/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      showToast(resp.message || "所有权重已重置");
+      await loadEmailDomains();
+    } catch (err) {
+      showToast(err.message || "重置失败", "error");
+    }
+  }
+
+  async function toggleDomain(key, enabled) {
+    try {
+      const resp = await api("/api/email/domains/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, enabled }),
+      });
+      showToast(resp.message || "域名状态已更新");
+      await loadEmailDomains();
+    } catch (err) {
+      showToast(err.message || "更新失败", "error");
+    }
+  }
+
+  function renderDomainWeightTable(items = [], summary = {}) {
+    document.getElementById("email-weight-count").textContent = String(summary.count ?? items.length ?? 0);
+    document.getElementById("email-weight-enabled-count").textContent = String(summary.enabled_count ?? 0);
+    document.getElementById("email-weight-max").textContent = String(summary.max_score ?? "-");
+    document.getElementById("email-weight-min").textContent = String(summary.min_score ?? "-");
+    document.getElementById("email-weight-avg").textContent = String(summary.avg_score ?? "-");
+
+    const table = document.getElementById("email-domain-weight-table");
+    if (!items.length) {
+      table.innerHTML = `<tr><td colspan="9" class="muted">当前还没有可管理的邮箱域名</td></tr>`;
+      return;
+    }
+
+    table.innerHTML = items.map(item => `
+      <tr>
+        <td>${esc(item.domain || "-")}</td>
+        <td>${esc(item.source || item.label || item.provider_name || "-")}</td>
+        <td>${esc(domainStateText(item))}</td>
+        <td>${esc(item.score)}</td>
+        <td>${esc(item.successes ?? 0)}</td>
+        <td>${esc(item.failures ?? 0)}</td>
+        <td>${esc(statusText(item))}</td>
+        <td>${esc(item.last_reason || "-")}</td>
+        <td class="toolbar">
+          ${item.config_enabled
+            ? `<button class="btn secondary small-btn" type="button" data-toggle-domain="${esc(item.key)}" data-next-enabled="${item.active ? "0" : "1"}">${item.active ? "禁用" : "启用"}</button>`
+            : `<button class="btn secondary small-btn" type="button" disabled title="请先在邮箱设置里启用对应条目">条目未启用</button>`}
+          <button class="btn secondary small-btn" type="button" data-reset-weight="${esc(item.key)}">重置</button>
+        </td>
+      </tr>
+    `).join("");
+
+    table.querySelectorAll("[data-reset-weight]").forEach((button) => {
+      button.addEventListener("click", () => resetWeight(button.dataset.resetWeight || ""));
+    });
+    table.querySelectorAll("[data-toggle-domain]").forEach((button) => {
+      button.addEventListener("click", () => toggleDomain(button.dataset.toggleDomain || "", button.dataset.nextEnabled === "1"));
+    });
+  }
+
+  function fillEmailDomains(data) {
+    const email = data.email || {};
+    const weightCfg = email.weight || {};
+    document.getElementById("email-weight-default-score").value = weightCfg.default_score ?? 100;
+    document.getElementById("email-weight-min-score").value = weightCfg.min_score ?? 20;
+    document.getElementById("email-weight-max-score").value = weightCfg.max_score ?? 200;
+    document.getElementById("email-weight-success-delta").value = weightCfg.success_delta ?? 8;
+    document.getElementById("email-weight-failure-delta").value = weightCfg.failure_delta ?? 20;
+    renderDomainWeightTable(data.domain_weight_items || [], data.domain_weight_summary || {});
+  }
+
+  async function loadEmailDomains() {
+    const resp = await api("/api/config/email-domains");
+    fillEmailDomains(resp.data || {});
+  }
+
+  document.getElementById("email-domain-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config/email-domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: {
+            weight: {
+              default_score: Number(document.getElementById("email-weight-default-score").value || 100),
+              min_score: Number(document.getElementById("email-weight-min-score").value || 20),
+              max_score: Number(document.getElementById("email-weight-max-score").value || 200),
+              success_delta: Number(document.getElementById("email-weight-success-delta").value || 8),
+              failure_delta: Number(document.getElementById("email-weight-failure-delta").value || 20),
+            },
+          },
+        }),
+      });
+      fillEmailDomains(resp.data || {});
+      showToast("邮箱域名权重配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadEmailDomains().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

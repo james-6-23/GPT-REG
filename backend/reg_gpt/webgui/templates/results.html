@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>最近 Token 文件</h2>
+    <table>
+      <thead><tr><th>文件名</th><th>大小</th><th>更新时间</th></tr></thead>
+      <tbody id="token-body">
+        <tr><td colspan="3" class="muted">正在加载...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>最近账号记录</h2>
+    <table>
+      <thead><tr><th>邮箱</th><th>账号ID</th><th>注册时间</th></tr></thead>
+      <tbody id="account-body">
+        <tr><td colspan="3" class="muted">正在加载...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function formatSize(size) {
+    const n = Number(size || 0);
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  }
+
+  async function loadResults() {
+    const resp = await api("/api/results");
+    const data = resp.data || {};
+    const tokens = data.recent_tokens || [];
+    const accounts = data.recent_accounts || [];
+
+    document.getElementById("token-body").innerHTML = tokens.length ? tokens.map(item => `
+      <tr>
+        <td><code>${item.name}</code></td>
+        <td>${formatSize(item.size)}</td>
+        <td>${item.modified_at}</td>
+      </tr>
+    `).join("") : `<tr><td colspan="3" class="muted">暂无 Token 输出</td></tr>`;
+
+    document.getElementById("account-body").innerHTML = accounts.length ? accounts.map(item => `
+      <tr>
+        <td>${item.email || "-"}</td>
+        <td><code>${item.account_id || "-"}</code></td>
+        <td>${item.registered_at || "-"}</td>
+      </tr>
+    `).join("") : `<tr><td colspan="3" class="muted">暂无账号记录</td></tr>`;
+  }
+
+  loadResults().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

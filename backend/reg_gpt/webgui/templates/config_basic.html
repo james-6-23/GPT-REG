@@ -1,0 +1,67 @@
+{% extends "config_base.html" %}
+{% block config_content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>基础配置</h2>
+    <p class="panel-desc">这里放 WebUI 基础监听信息。修改后建议重启 WebUI 进程生效。</p>
+    <form id="basic-form" class="form-grid">
+      <div class="field">
+        <label>WebUI 监听地址</label>
+        <input id="basic-host" type="text" />
+      </div>
+      <div class="field">
+        <label>WebUI 端口</label>
+        <input id="basic-port" type="number" min="1" />
+      </div>
+      <div class="toolbar span-2">
+        <button class="btn primary" type="submit">保存基础配置</button>
+        <button class="btn secondary" type="button" onclick="loadBasic()">重新加载</button>
+      </div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>说明</h2>
+    <div class="kv-list">
+      <div><label>配置文件</label><code id="basic-config-path">-</code></div>
+      <div><label>生效方式</label><code>WebUI 监听地址/端口修改后，建议手动重启 WebUI</code></div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function fillBasic(data) {
+    const webui = data.webui || {};
+    document.getElementById("basic-host").value = webui.host || "127.0.0.1";
+    document.getElementById("basic-port").value = webui.port || 5050;
+    document.getElementById("basic-config-path").textContent = data.config_path || "-";
+  }
+
+  async function loadBasic() {
+    const resp = await api("/api/config/basic");
+    fillBasic(resp.data || {});
+  }
+
+  document.getElementById("basic-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config/basic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webui: {
+            host: document.getElementById("basic-host").value.trim(),
+            port: Number(document.getElementById("basic-port").value || 5050),
+          },
+        }),
+      });
+      fillBasic(resp.data || {});
+      showToast("基础配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadBasic().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

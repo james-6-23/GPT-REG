@@ -1,0 +1,24 @@
+# 不需要进入 Docker 构建上下文的文件
+.git
+.gitignore
+.venv
+venv
+admin 2
+__pycache__
+*.pyc
+
+# 前端构建产物（Dockerfile 内部会重新构建）
+frontend/node_modules
+frontend/dist
+
+# 运行时数据
+backend/runtime/logs
+backend/runtime/state
+backend/runtime/data
+
+# OS / IDE
+.DS_Store
+.idea
+.vscode
+*.swp
+*.tmp

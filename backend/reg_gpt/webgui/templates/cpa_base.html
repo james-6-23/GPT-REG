@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="subnav">
+    {% for item in cpa_tabs %}
+      <a class="subnav-link {% if request.endpoint == item.endpoint %}active{% endif %}" href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% block cpa_content %}{% endblock %}
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends "cpa_base.html" %}
+{% block cpa_content %}
+<section class="panel">
+  <div class="toolbar">
+    <button class="btn primary" type="button" onclick="startHealthCheck(false)">执行全量健康检测</button>
+    <button class="btn secondary" type="button" onclick="startHealthCheck(true)">检测并清理全部不可用账号</button>
+    <button class="btn secondary" type="button" onclick="cleanupMarkedUnusable()">直接清理已标记不可用账号</button>
+    <button class="btn secondary" type="button" onclick="refreshTaskStatus()">刷新任务状态</button>
+  </div>
+  <div class="status-grid" style="margin-top:12px;">
+    <div class="metric"><span>当前阶段</span><strong id="health-stage">未开始</strong></div>
+    <div class="metric"><span>当前进度</span><strong id="health-progress">0%</strong></div>
+    <div class="metric"><span>线程数</span><strong id="health-workers">-</strong></div>
+    <div class="metric"><span>代理</span><strong id="health-proxy">直连</strong></div>
+    <div class="metric"><span>检测范围</span><strong id="health-scope">全部账号</strong></div>
+    <div class="metric"><span>当前计数</span><strong id="health-counter">0 / 0</strong></div>
+  </div>
+  <div class="progress-track" style="margin-top:12px;">
+    <div id="health-progress-bar" class="progress-fill" style="width:0%;"></div>
+  </div>
+  <div class="info-box" id="health-summary" style="margin-top:12px;">尚未执行健康检测任务</div>
+</section>
+
+<section class="grid two-col">
+  <div class="panel">
+    <h2>本次任务摘要</h2>
+    <div class="metric-grid wide">
+      <div class="metric"><span>总检测数</span><strong id="sum-total">0</strong></div>
+      <div class="metric"><span>Healthy</span><strong id="sum-healthy">0</strong></div>
+      <div class="metric"><span>Limited</span><strong id="sum-limited">0</strong></div>
+      <div class="metric"><span>Unknown</span><strong id="sum-unknown">0</strong></div>
+      <div class="metric"><span>Unusable</span><strong id="sum-unusable">0</strong></div>
+      <div class="metric"><span>Disabled</span><strong id="sum-disabled">0</strong></div>
+      <div class="metric"><span>清理目标</span><strong id="sum-cleanup-total">0</strong></div>
+      <div class="metric"><span>已删除</span><strong id="sum-deleted">0</strong></div>
+      <div class="metric"><span>删除失败</span><strong id="sum-delete-failed">0</strong></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>任务信息</h2>
+    <div class="kv-list">
+      <div><label>任务类型</label><code id="task-type">-</code></div>
+      <div><label>探测模式</label><code id="task-probe-mode">-</code></div>
+      <div><label>开始时间</label><code id="task-started-at">-</code></div>
+      <div><label>完成时间</label><code id="task-finished-at">-</code></div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>最近处理结果（最多展示 120 条）</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>名称</th><th>邮箱</th><th>Provider</th><th>健康状态</th><th>HTTP</th><th>原因</th><th>检测时间</th></tr>
+      </thead>
+      <tbody id="health-body">
+        <tr><td colspan="7" class="muted">暂无检测结果</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  let HEALTH_TASK = {};
+  let healthPollTimer = null;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function renderHealthTask(task) {
+    HEALTH_TASK = task || {};
+    const summary = HEALTH_TASK.summary || {};
+    const progressPercent = Number(HEALTH_TASK.progress_percent || 0);
+    const progressCurrent = Number(HEALTH_TASK.progress_current || 0);
+    const progressTotal = Number(HEALTH_TASK.progress_total || 0);
+    const scopeText = HEALTH_TASK.selected_total
+      ? `选中 ${HEALTH_TASK.selected_total} 个账号`
+      : "全部账号";
+    const recentItems = HEALTH_TASK.recent_items || [];
+
+    document.getElementById("health-stage").textContent = HEALTH_TASK.stage_label || "未开始";
+    document.getElementById("health-progress").textContent = `${progressPercent}%`;
+    document.getElementById("health-workers").textContent = HEALTH_TASK.probe_workers ? `${HEALTH_TASK.probe_workers} 检测 / ${HEALTH_TASK.delete_workers || 0} 清理` : "-";
+    document.getElementById("health-proxy").textContent = HEALTH_TASK.proxy_label || "直连";
+    document.getElementById("health-scope").textContent = scopeText;
+    document.getElementById("health-counter").textContent = `${progressCurrent} / ${progressTotal}`;
+    document.getElementById("health-progress-bar").style.width = `${progressPercent}%`;
+
+    document.getElementById("sum-total").textContent = HEALTH_TASK.total ?? 0;
+    document.getElementById("sum-healthy").textContent = summary.healthy ?? 0;
+    document.getElementById("sum-limited").textContent = summary.limited ?? 0;
+    document.getElementById("sum-unknown").textContent = summary.unknown ?? 0;
+    document.getElementById("sum-unusable").textContent = summary.unusable ?? 0;
+    document.getElementById("sum-disabled").textContent = summary.disabled ?? 0;
+    document.getElementById("sum-cleanup-total").textContent = HEALTH_TASK.cleanup_total ?? 0;
+    document.getElementById("sum-deleted").textContent = HEALTH_TASK.deleted_total ?? 0;
+    document.getElementById("sum-delete-failed").textContent = HEALTH_TASK.failed_total ?? 0;
+
+    document.getElementById("task-type").textContent =
+      HEALTH_TASK.task_type === "cleanup" ? "检测并清理"
+      : (HEALTH_TASK.task_type === "check" ? "仅检测"
+      : (HEALTH_TASK.task_type === "cleanup_cached" ? "按已标记状态直接清理" : "-"));
+    document.getElementById("task-probe-mode").textContent = HEALTH_TASK.probe_mode || "-";
+    document.getElementById("task-started-at").textContent = HEALTH_TASK.started_at || "-";
+    document.getElementById("task-finished-at").textContent = HEALTH_TASK.finished_at || "-";
+
+    document.getElementById("health-summary").textContent =
+      `${HEALTH_TASK.message || "尚未执行健康检测任务"} ｜ 模式=${HEALTH_TASK.probe_mode || "-"} ｜ 代理=${HEALTH_TASK.proxy_label || "直连"} ｜ 线程=${HEALTH_TASK.probe_workers || 0}/${HEALTH_TASK.delete_workers || 0}`;
+
+    const tbody = document.getElementById("health-body");
+    if (!recentItems.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="muted">暂无检测结果</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = recentItems.map(item => `
+      <tr>
+        <td><code>${escapeHtml(item.name || "-")}</code></td>
+        <td>${escapeHtml(item.email || "-")}</td>
+        <td>${escapeHtml(item.provider || "-")}</td>
+        <td>${escapeHtml(item.health_status || "-")}</td>
+        <td>${escapeHtml(item.health_http_status || "-")}</td>
+        <td>${escapeHtml(item.health_reason || "-")}</td>
+        <td>${escapeHtml(item.health_checked_at || "-")}</td>
+      </tr>
+    `).join("");
+  }
+
+  function startPoller() {
+    if (healthPollTimer) return;
+    healthPollTimer = window.setInterval(() => {
+      refreshTaskStatus(true).catch(() => {});
+    }, 2000);
+  }
+
+  function stopPoller() {
+    if (!healthPollTimer) return;
+    window.clearInterval(healthPollTimer);
+    healthPollTimer = null;
+  }
+
+  async function refreshTaskStatus(silent = false) {
+    try {
+      const resp = await api("/api/cpa/health/status");
+      const task = resp.data || {};
+      renderHealthTask(task);
+      if (task.running) {
+        startPoller();
+      } else {
+        stopPoller();
+      }
+      return task;
+    } catch (err) {
+      if (!silent) {
+        showToast(err.message || "读取健康任务状态失败", "error");
+      }
+      throw err;
+    }
+  }
+
+  async function startHealthCheck(cleanup) {
+    try {
+      const resp = await api("/api/cpa/health/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cleanup: Boolean(cleanup) }),
+      });
+      const task = resp.data || {};
+      renderHealthTask(task);
+      if (task.running) {
+        startPoller();
+      }
+      showToast(task.started === false ? "已有健康任务正在运行，已切换到当前进度" : (cleanup ? "已启动全量检测并清理" : "已启动全量健康检测"));
+    } catch (err) {
+      showToast(err.message || "启动健康任务失败", "error");
+    }
+  }
+
+  async function cleanupMarkedUnusable() {
+    try {
+      const resp = await api("/api/cpa/health/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = resp.data || {};
+      showToast(data.message || `已直接清理 ${data.deleted_total || 0} 个已标记不可用账号`);
+      await refreshTaskStatus(true);
+    } catch (err) {
+      showToast(err.message || "直接清理失败", "error");
+    }
+  }
+
+  refreshTaskStatus(true).catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

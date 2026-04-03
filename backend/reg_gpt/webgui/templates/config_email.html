@@ -1,0 +1,585 @@
+{% extends "config_base.html" %}
+{% block config_content %}
+<form id="email-form">
+  <section class="panel">
+    <h2>邮箱编排中心</h2>
+    <p class="panel-desc">所有邮箱方式都支持多条目配置。尤其是“域名池邮箱”，现在可以给每个 API 单独配置自己的域名池。</p>
+    <div class="grid two-col compact-grid">
+      <div class="field">
+        <label>邮箱选择策略</label>
+        <select id="email-selection-mode">
+          <option value="random_enabled">按动态权重随机使用已启用邮箱条目</option>
+          <option value="first_enabled">优先使用当前高权重条目（同分按配置顺序）</option>
+        </select>
+      </div>
+      <div class="kv-list compact-kv">
+        <div><label>当前可用条目</label><code id="email-enabled-count">0</code></div>
+        <div><label>域名池 API 条目</label><code id="mailapi-entry-count">0</code></div>
+        <div><label>域名池总域名数</label><code id="mailapi-domain-count">0</code></div>
+        <div><label>CFMail 启用账号池</label><code id="cfmail-enabled-accounts">0</code></div>
+        <div><label>说明</label><code id="email-summary-text">尚未加载</code></div>
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:12px;">
+      <button class="btn primary" type="submit">保存邮箱配置</button>
+      <button class="btn secondary" type="button" onclick="loadEmail()">重新加载</button>
+    </div>
+  </section>
+
+  <section class="grid two-col">
+    <div class="panel provider-card">
+      <h2>域名池邮箱</h2>
+      <p class="panel-desc">每个条目对应一个独立 API 站点，可分别配置自己的 API Key 和域名池。</p>
+      <div class="form-grid">
+        <div class="field checkbox-group span-2">
+          <label><input id="mailapi-enabled" type="checkbox" /> 启用域名池邮箱</label>
+        </div>
+      </div>
+      <div class="mini-toolbar">
+        <button class="btn secondary" type="button" onclick="addMailapiEntry()">+ 新增 API 条目</button>
+      </div>
+      <div id="mailapi-entries" class="account-list"></div>
+    </div>
+
+    <div class="panel provider-card">
+      <h2>CFMail 账号池</h2>
+      <p class="panel-desc">保留现有账号池模型，支持多个 Worker 管理账号。</p>
+      <div class="form-grid">
+        <div class="field checkbox-group span-2">
+          <label><input id="cfmail-enabled" type="checkbox" /> 启用 CFMail 通道</label>
+        </div>
+        <div class="field">
+          <label>账号选择</label>
+          <input id="cfmail-profile" type="text" placeholder="auto 或指定账号名" />
+        </div>
+        <div class="field">
+          <label>连续失败阈值</label>
+          <input id="cfmail-fail-threshold" type="number" min="1" />
+        </div>
+        <div class="field">
+          <label>冷却秒数</label>
+          <input id="cfmail-cooldown-seconds" type="number" min="0" />
+        </div>
+      </div>
+      <div class="mini-toolbar">
+        <button class="btn secondary" type="button" onclick="addCfmailAccount()">+ 新增账号</button>
+      </div>
+      <div id="cfmail-accounts" class="account-list"></div>
+    </div>
+
+    <div class="panel provider-card">
+      <h2>Cloudflare Worker 邮箱</h2>
+      <p class="panel-desc">不再预填默认 Worker 地址或域名；请按需要添加多个独立 Worker 条目。</p>
+      <div class="form-grid">
+        <div class="field checkbox-group span-2">
+          <label><input id="cloudflare-enabled" type="checkbox" /> 启用 Cloudflare Worker 邮箱</label>
+        </div>
+      </div>
+      <div class="mini-toolbar">
+        <button class="btn secondary" type="button" onclick="addCloudflareEntry()">+ 新增 Worker 条目</button>
+      </div>
+      <div id="cloudflare-entries" class="account-list"></div>
+    </div>
+
+    <div class="panel provider-card">
+      <h2>DuckMail</h2>
+      <div class="form-grid">
+        <div class="field checkbox-group span-2">
+          <label><input id="duckmail-enabled" type="checkbox" /> 启用 DuckMail</label>
+        </div>
+      </div>
+      <div class="mini-toolbar">
+        <button class="btn secondary" type="button" onclick="addDuckmailEntry()">+ 新增 DuckMail 条目</button>
+      </div>
+      <div id="duckmail-entries" class="account-list"></div>
+    </div>
+
+    <div class="panel provider-card">
+      <h2>TempMail.lol</h2>
+      <div class="form-grid">
+        <div class="field checkbox-group span-2">
+          <label><input id="tempmail-enabled" type="checkbox" /> 启用 TempMail.lol</label>
+        </div>
+      </div>
+      <div class="mini-toolbar">
+        <button class="btn secondary" type="button" onclick="addTempmailEntry()">+ 新增 TempMail 条目</button>
+      </div>
+      <div id="tempmail-entries" class="account-list"></div>
+    </div>
+
+    <div class="panel provider-card">
+      <h2>LaMail</h2>
+      <div class="form-grid">
+        <div class="field checkbox-group span-2">
+          <label><input id="lamail-enabled" type="checkbox" /> 启用 LaMail</label>
+        </div>
+      </div>
+      <div class="mini-toolbar">
+        <button class="btn secondary" type="button" onclick="addLamailEntry()">+ 新增 LaMail 条目</button>
+      </div>
+      <div id="lamail-entries" class="account-list"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="toolbar">
+      <button class="btn primary" type="submit">保存邮箱配置</button>
+      <button class="btn secondary" type="button" onclick="loadEmail()">重新加载</button>
+    </div>
+  </section>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function esc(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function splitLines(value) {
+    return String(value || "")
+      .split(/\r?\n/)
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+
+  function bindRowEvents(row) {
+    row.querySelectorAll("input, textarea, select").forEach((input) => {
+      input.addEventListener("input", updateEmailSummary);
+      input.addEventListener("change", updateEmailSummary);
+    });
+    const removeBtn = row.querySelector("[data-remove-row]");
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => {
+        row.remove();
+        updateEmailSummary();
+      });
+    }
+  }
+
+  function createMailapiEntryRow(entry = {}) {
+    const row = document.createElement("div");
+    row.className = "account-card";
+    row.dataset.mailapiEntry = "1";
+    row.innerHTML = `
+      <div class="account-card-head">
+        <strong>域名池 API 条目</strong>
+        <button class="btn secondary small-btn" type="button" data-remove-row>移除</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <div class="field checkbox-group span-2">
+          <label><input data-key="enabled" type="checkbox" ${entry.enabled !== false ? "checked" : ""} /> 启用此 API 条目</label>
+        </div>
+        <div class="field span-2">
+          <label>条目名称</label>
+          <input data-key="label" type="text" value="${esc(entry.label || "")}" placeholder="例如：主站 / 备用站 A" />
+        </div>
+        <div class="field span-2">
+          <label>API Base</label>
+          <input data-key="api_base" type="text" value="${esc(entry.api_base || "")}" placeholder="https://mailapizv.uton.me" />
+        </div>
+        <div class="field span-2">
+          <label>API Key</label>
+          <input data-key="api_key" type="password" value="${esc(entry.api_key || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>此 API 专属域名池（每行一个）</label>
+          <textarea data-key="domains" rows="8" placeholder="*.example.com&#10;mail.example.net">${esc((entry.domains || []).join("\n"))}</textarea>
+        </div>
+      </div>
+    `;
+    bindRowEvents(row);
+    return row;
+  }
+
+  function createCfmailRow(account = {}) {
+    const row = document.createElement("div");
+    row.className = "account-card";
+    row.dataset.cfmailAccount = "1";
+    row.innerHTML = `
+      <div class="account-card-head">
+        <strong>CFMail 账号条目</strong>
+        <button class="btn secondary small-btn" type="button" data-remove-row>移除</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <div class="field checkbox-group span-2">
+          <label><input data-key="enabled" type="checkbox" ${account.enabled !== false ? "checked" : ""} /> 启用此账号</label>
+        </div>
+        <div class="field"><label>名称</label><input data-key="name" type="text" value="${esc(account.name || "")}" /></div>
+        <div class="field"><label>Worker 域名</label><input data-key="worker_domain" type="text" value="${esc(account.worker_domain || "")}" /></div>
+        <div class="field"><label>邮箱域名</label><input data-key="email_domain" type="text" value="${esc(account.email_domain || "")}" /></div>
+        <div class="field"><label>管理员密码</label><input data-key="admin_password" type="password" value="${esc(account.admin_password || "")}" /></div>
+      </div>
+    `;
+    bindRowEvents(row);
+    return row;
+  }
+
+  function createCloudflareEntryRow(entry = {}) {
+    const row = document.createElement("div");
+    row.className = "account-card";
+    row.dataset.cloudflareEntry = "1";
+    row.innerHTML = `
+      <div class="account-card-head">
+        <strong>Cloudflare Worker 条目</strong>
+        <button class="btn secondary small-btn" type="button" data-remove-row>移除</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <div class="field checkbox-group span-2">
+          <label><input data-key="enabled" type="checkbox" ${entry.enabled !== false ? "checked" : ""} /> 启用此条目</label>
+        </div>
+        <div class="field span-2">
+          <label>条目名称</label>
+          <input data-key="label" type="text" value="${esc(entry.label || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>Worker URL</label>
+          <input data-key="worker_url" type="text" value="${esc(entry.worker_url || "")}" placeholder="https://xxx.workers.dev" />
+        </div>
+        <div class="field">
+          <label>邮箱域名</label>
+          <input data-key="email_domain" type="text" value="${esc(entry.email_domain || "")}" />
+        </div>
+        <div class="field">
+          <label>API Secret</label>
+          <input data-key="api_secret" type="password" value="${esc(entry.api_secret || "")}" />
+        </div>
+      </div>
+    `;
+    bindRowEvents(row);
+    return row;
+  }
+
+  function createDuckmailEntryRow(entry = {}) {
+    const row = document.createElement("div");
+    row.className = "account-card";
+    row.dataset.duckmailEntry = "1";
+    row.innerHTML = `
+      <div class="account-card-head">
+        <strong>DuckMail 条目</strong>
+        <button class="btn secondary small-btn" type="button" data-remove-row>移除</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <div class="field checkbox-group span-2">
+          <label><input data-key="enabled" type="checkbox" ${entry.enabled !== false ? "checked" : ""} /> 启用此条目</label>
+        </div>
+        <div class="field span-2">
+          <label>条目名称</label>
+          <input data-key="label" type="text" value="${esc(entry.label || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>API Base</label>
+          <input data-key="api_base" type="text" value="${esc(entry.api_base || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>Bearer</label>
+          <input data-key="bearer" type="password" value="${esc(entry.bearer || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>邮箱域名</label>
+          <input data-key="email_domain" type="text" value="${esc(entry.email_domain || "")}" />
+        </div>
+      </div>
+    `;
+    bindRowEvents(row);
+    return row;
+  }
+
+  function createTempmailEntryRow(entry = {}) {
+    const row = document.createElement("div");
+    row.className = "account-card";
+    row.dataset.tempmailEntry = "1";
+    row.innerHTML = `
+      <div class="account-card-head">
+        <strong>TempMail 条目</strong>
+        <button class="btn secondary small-btn" type="button" data-remove-row>移除</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <div class="field checkbox-group span-2">
+          <label><input data-key="enabled" type="checkbox" ${entry.enabled !== false ? "checked" : ""} /> 启用此条目</label>
+        </div>
+        <div class="field span-2">
+          <label>条目名称</label>
+          <input data-key="label" type="text" value="${esc(entry.label || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>API Base</label>
+          <input data-key="api_base" type="text" value="${esc(entry.api_base || "")}" />
+        </div>
+      </div>
+    `;
+    bindRowEvents(row);
+    return row;
+  }
+
+  function createLamailEntryRow(entry = {}) {
+    const row = document.createElement("div");
+    row.className = "account-card";
+    row.dataset.lamailEntry = "1";
+    row.innerHTML = `
+      <div class="account-card-head">
+        <strong>LaMail 条目</strong>
+        <button class="btn secondary small-btn" type="button" data-remove-row>移除</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <div class="field checkbox-group span-2">
+          <label><input data-key="enabled" type="checkbox" ${entry.enabled !== false ? "checked" : ""} /> 启用此条目</label>
+        </div>
+        <div class="field span-2">
+          <label>条目名称</label>
+          <input data-key="label" type="text" value="${esc(entry.label || "")}" />
+        </div>
+        <div class="field span-2">
+          <label>API Base</label>
+          <input data-key="api_base" type="text" value="${esc(entry.api_base || "")}" />
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input data-key="api_key" type="password" value="${esc(entry.api_key || "")}" />
+        </div>
+        <div class="field">
+          <label>指定域名（可留空）</label>
+          <input data-key="domain" type="text" value="${esc(entry.domain || "")}" />
+        </div>
+      </div>
+    `;
+    bindRowEvents(row);
+    return row;
+  }
+
+  function addMailapiEntry(entry = {}) { document.getElementById("mailapi-entries").appendChild(createMailapiEntryRow(entry)); updateEmailSummary(); }
+  function addCfmailAccount(entry = {}) { document.getElementById("cfmail-accounts").appendChild(createCfmailRow(entry)); updateEmailSummary(); }
+  function addCloudflareEntry(entry = {}) { document.getElementById("cloudflare-entries").appendChild(createCloudflareEntryRow(entry)); updateEmailSummary(); }
+  function addDuckmailEntry(entry = {}) { document.getElementById("duckmail-entries").appendChild(createDuckmailEntryRow(entry)); updateEmailSummary(); }
+  function addTempmailEntry(entry = {}) { document.getElementById("tempmail-entries").appendChild(createTempmailEntryRow(entry)); updateEmailSummary(); }
+  function addLamailEntry(entry = {}) { document.getElementById("lamail-entries").appendChild(createLamailEntryRow(entry)); updateEmailSummary(); }
+
+  function collectRows(selector, keys) {
+    return Array.from(document.querySelectorAll(selector)).map((row) => {
+      const item = {};
+      keys.forEach((key) => {
+        const el = row.querySelector(`[data-key="${key}"]`);
+        if (!el) return;
+        if (el.type === "checkbox") item[key] = el.checked;
+        else if (el.tagName === "TEXTAREA") item[key] = splitLines(el.value);
+        else item[key] = el.value.trim();
+      });
+      return item;
+    });
+  }
+
+  function collectCfmailAccounts() {
+    return collectRows("[data-cfmail-account]", ["enabled", "name", "worker_domain", "email_domain", "admin_password"])
+      .filter((item) => item.name || item.worker_domain || item.email_domain || item.admin_password);
+  }
+
+  function collectMailapiEntries() {
+    return collectRows("[data-mailapi-entry]", ["enabled", "label", "api_base", "api_key", "domains"])
+      .filter((item) => item.label || item.api_base || item.api_key || (item.domains || []).length);
+  }
+
+  function collectCloudflareEntries() {
+    return collectRows("[data-cloudflare-entry]", ["enabled", "label", "worker_url", "email_domain", "api_secret"])
+      .filter((item) => item.label || item.worker_url || item.email_domain || item.api_secret);
+  }
+
+  function collectDuckmailEntries() {
+    return collectRows("[data-duckmail-entry]", ["enabled", "label", "api_base", "bearer", "email_domain"])
+      .filter((item) => item.label || item.api_base || item.bearer || item.email_domain);
+  }
+
+  function collectTempmailEntries() {
+    return collectRows("[data-tempmail-entry]", ["enabled", "label", "api_base"])
+      .filter((item) => item.label || item.api_base);
+  }
+
+  function collectLamailEntries() {
+    return collectRows("[data-lamail-entry]", ["enabled", "label", "api_base", "api_key", "domain"])
+      .filter((item) => item.label || item.api_base || item.api_key || item.domain);
+  }
+
+  function updateEmailSummary(serverEnabledCount = null) {
+    const mailapiEntries = collectMailapiEntries();
+    const cfmailAccounts = collectCfmailAccounts();
+    const cloudflareEntries = collectCloudflareEntries();
+    const duckmailEntries = collectDuckmailEntries();
+    const tempmailEntries = collectTempmailEntries();
+    const lamailEntries = collectLamailEntries();
+
+    const localEnabledCount =
+      (document.getElementById("mailapi-enabled").checked ? mailapiEntries.filter(item => item.enabled).length : 0) +
+      (document.getElementById("cfmail-enabled").checked ? cfmailAccounts.filter(item => item.enabled).length : 0) +
+      (document.getElementById("cloudflare-enabled").checked ? cloudflareEntries.filter(item => item.enabled).length : 0) +
+      (document.getElementById("duckmail-enabled").checked ? duckmailEntries.filter(item => item.enabled).length : 0) +
+      (document.getElementById("tempmail-enabled").checked ? tempmailEntries.filter(item => item.enabled).length : 0) +
+      (document.getElementById("lamail-enabled").checked ? lamailEntries.filter(item => item.enabled).length : 0);
+
+    const mailapiDomainCount = mailapiEntries.reduce((sum, item) => sum + (item.domains || []).length, 0);
+
+    document.getElementById("email-enabled-count").textContent = String(serverEnabledCount ?? localEnabledCount);
+    document.getElementById("mailapi-entry-count").textContent = String(mailapiEntries.length);
+    document.getElementById("mailapi-domain-count").textContent = String(mailapiDomainCount);
+    document.getElementById("cfmail-enabled-accounts").textContent = String(cfmailAccounts.filter(item => item.enabled).length);
+    document.getElementById("email-summary-text").textContent =
+      localEnabledCount > 0
+        ? `当前共启用 ${localEnabledCount} 个邮箱条目；域名池 API 条目 ${mailapiEntries.length} 个，总域名 ${mailapiDomainCount} 个`
+        : "当前尚未启用任何邮箱条目";
+  }
+
+  function clearEntryContainers() {
+    ["mailapi-entries", "cfmail-accounts", "cloudflare-entries", "duckmail-entries", "tempmail-entries", "lamail-entries"]
+      .forEach((id) => { document.getElementById(id).innerHTML = ""; });
+  }
+
+  function fillEmail(data) {
+    const email = data.email || {};
+    const providers = email.providers || {};
+    const mailapi = providers.mailapi_pool || {};
+    const cfmail = providers.cfmail || {};
+    const cloudflare = providers.cloudflare || {};
+    const duckmail = providers.duckmail || {};
+    const tempmail = providers.tempmail_lol || {};
+    const lamail = providers.lamail || {};
+
+    document.getElementById("email-selection-mode").value = email.selection_mode || "first_enabled";
+    document.getElementById("mailapi-enabled").checked = !!mailapi.enabled;
+    document.getElementById("cfmail-enabled").checked = !!cfmail.enabled;
+    document.getElementById("cloudflare-enabled").checked = !!cloudflare.enabled;
+    document.getElementById("duckmail-enabled").checked = !!duckmail.enabled;
+    document.getElementById("tempmail-enabled").checked = !!tempmail.enabled;
+    document.getElementById("lamail-enabled").checked = !!lamail.enabled;
+
+    document.getElementById("cfmail-profile").value = cfmail.profile || "auto";
+    document.getElementById("cfmail-fail-threshold").value = cfmail.fail_threshold ?? 3;
+    document.getElementById("cfmail-cooldown-seconds").value = cfmail.cooldown_seconds ?? 1800;
+
+    clearEntryContainers();
+
+    const mailapiEntries = Array.isArray(mailapi.entries) && mailapi.entries.length
+      ? mailapi.entries
+      : (mailapi.api_base || mailapi.api_key || (mailapi.domains || []).length
+          ? [{ enabled: !!mailapi.enabled, label: mailapi.label || "", api_base: mailapi.api_base || "", api_key: mailapi.api_key || "", domains: mailapi.domains || [] }]
+          : []);
+    const cloudflareEntries = Array.isArray(cloudflare.entries) && cloudflare.entries.length
+      ? cloudflare.entries
+      : (cloudflare.worker_url || cloudflare.email_domain || cloudflare.api_secret
+          ? [{ enabled: !!cloudflare.enabled, label: cloudflare.label || "", worker_url: cloudflare.worker_url || "", email_domain: cloudflare.email_domain || "", api_secret: cloudflare.api_secret || "" }]
+          : []);
+    const duckmailEntries = Array.isArray(duckmail.entries) && duckmail.entries.length
+      ? duckmail.entries
+      : (duckmail.api_base || duckmail.bearer || duckmail.email_domain
+          ? [{ enabled: !!duckmail.enabled, label: duckmail.label || "", api_base: duckmail.api_base || "", bearer: duckmail.bearer || "", email_domain: duckmail.email_domain || "" }]
+          : []);
+    const tempmailEntries = Array.isArray(tempmail.entries) && tempmail.entries.length
+      ? tempmail.entries
+      : (tempmail.api_base ? [{ enabled: !!tempmail.enabled, label: tempmail.label || "", api_base: tempmail.api_base || "" }] : []);
+    const lamailEntries = Array.isArray(lamail.entries) && lamail.entries.length
+      ? lamail.entries
+      : (lamail.api_base || lamail.api_key || lamail.domain
+          ? [{ enabled: !!lamail.enabled, label: lamail.label || "", api_base: lamail.api_base || "", api_key: lamail.api_key || "", domain: lamail.domain || "" }]
+          : []);
+
+    mailapiEntries.forEach(addMailapiEntry);
+    (cfmail.accounts || []).forEach(addCfmailAccount);
+    cloudflareEntries.forEach(addCloudflareEntry);
+    duckmailEntries.forEach(addDuckmailEntry);
+    tempmailEntries.forEach(addTempmailEntry);
+    lamailEntries.forEach(addLamailEntry);
+
+    if (!mailapiEntries.length) addMailapiEntry({ enabled: true });
+    if (!(cfmail.accounts || []).length) addCfmailAccount({ enabled: true });
+    if (!cloudflareEntries.length) addCloudflareEntry({ enabled: true });
+    if (!duckmailEntries.length) addDuckmailEntry({ enabled: true });
+    if (!tempmailEntries.length) addTempmailEntry({ enabled: true });
+    if (!lamailEntries.length) addLamailEntry({ enabled: true });
+
+    updateEmailSummary(data.enabled_count ?? 0);
+  }
+
+  async function loadEmail() {
+    const resp = await api("/api/config/email");
+    fillEmail(resp.data || {});
+  }
+
+  function buildPayload() {
+    return {
+      email: {
+        selection_mode: document.getElementById("email-selection-mode").value,
+        providers: {
+          mailapi_pool: {
+            enabled: document.getElementById("mailapi-enabled").checked,
+            type: "mailapi_pool",
+            label: "域名池邮箱",
+            entries: collectMailapiEntries(),
+          },
+          cfmail: {
+            enabled: document.getElementById("cfmail-enabled").checked,
+            type: "cfmail",
+            label: "CFMail 账号池",
+            profile: document.getElementById("cfmail-profile").value.trim() || "auto",
+            fail_threshold: Number(document.getElementById("cfmail-fail-threshold").value || 3),
+            cooldown_seconds: Number(document.getElementById("cfmail-cooldown-seconds").value || 1800),
+            accounts: collectCfmailAccounts(),
+          },
+          cloudflare: {
+            enabled: document.getElementById("cloudflare-enabled").checked,
+            type: "cloudflare",
+            label: "Cloudflare 邮箱",
+            entries: collectCloudflareEntries(),
+          },
+          duckmail: {
+            enabled: document.getElementById("duckmail-enabled").checked,
+            type: "duckmail",
+            label: "DuckMail",
+            entries: collectDuckmailEntries(),
+          },
+          tempmail_lol: {
+            enabled: document.getElementById("tempmail-enabled").checked,
+            type: "tempmail_lol",
+            label: "TempMail.lol",
+            entries: collectTempmailEntries(),
+          },
+          lamail: {
+            enabled: document.getElementById("lamail-enabled").checked,
+            type: "lamail",
+            label: "LaMail",
+            entries: collectLamailEntries(),
+          },
+        },
+      },
+    };
+  }
+
+  document.getElementById("email-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload()),
+      });
+      fillEmail(resp.data || {});
+      showToast("邮箱配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  [
+    "mailapi-enabled",
+    "cfmail-enabled",
+    "cloudflare-enabled",
+    "duckmail-enabled",
+    "tempmail-enabled",
+    "lamail-enabled",
+    "email-selection-mode",
+    "cfmail-profile",
+    "cfmail-fail-threshold",
+    "cfmail-cooldown-seconds",
+  ].forEach((id) => {
+    document.getElementById(id).addEventListener("input", () => updateEmailSummary());
+    document.getElementById(id).addEventListener("change", () => updateEmailSummary());
+  });
+
+  loadEmail().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

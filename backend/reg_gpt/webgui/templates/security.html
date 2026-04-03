@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid two-col">
+  <div class="panel">
+    <h2>访问控制</h2>
+    <form id="security-form" class="form-grid">
+      <div class="field">
+        <label>登录用户名</label>
+        <input id="sec-username" type="text" />
+      </div>
+      <div class="field">
+        <label>新密码</label>
+        <input id="sec-password" type="password" placeholder="留空表示不修改" />
+      </div>
+      <div class="field">
+        <label>会话时长（分钟）</label>
+        <input id="sec-session-minutes" type="number" min="5" />
+      </div>
+      <div class="field">
+        <label>登录限速（窗口内次数）</label>
+        <input id="sec-rate-limit" type="number" min="3" />
+      </div>
+      <div class="field">
+        <label>限速窗口（秒）</label>
+        <input id="sec-rate-window" type="number" min="60" />
+      </div>
+      <div class="field">
+        <label>服务器监听地址</label>
+        <input id="sec-host" type="text" />
+      </div>
+      <div class="field">
+        <label>服务器端口</label>
+        <input id="sec-port" type="number" min="1" />
+      </div>
+      <div class="field checkbox-group">
+        <label><input id="sec-secure-cookie" type="checkbox" /> 启用 Secure Cookie</label>
+        <label><input id="sec-csrf" type="checkbox" /> 启用 CSRF 校验</label>
+      </div>
+      <div class="field span-2">
+        <label>Trusted Origins（每行一个）</label>
+        <textarea id="sec-origins" rows="5"></textarea>
+      </div>
+      <div class="toolbar span-2">
+        <button class="btn primary" type="submit">保存安全配置</button>
+        <button class="btn secondary" type="button" onclick="rotateToken()">旋转 API Token</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>安全摘要</h2>
+    <div class="kv-list">
+      <div><label>配置文件</label><code id="sec-config-path">-</code></div>
+      <div><label>凭据交付方式</label><code id="sec-credential-delivery">-</code></div>
+      <div><label>旧版独立安全配置</label><code id="sec-legacy-config">-</code></div>
+      <div><label>API Token 状态</label><code id="sec-token-status">-</code></div>
+    </div>
+    <div class="info-box" id="sec-token-output" style="margin-top:12px;">当你旋转或手动设置新 Token 后，会在这里显示一次。</div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function fillSecurity(data) {
+    document.getElementById("sec-username").value = data.username || "";
+    document.getElementById("sec-session-minutes").value = data.session_minutes ?? 480;
+    document.getElementById("sec-rate-limit").value = data.login_rate_limit ?? 8;
+    document.getElementById("sec-rate-window").value = data.login_window_seconds ?? 900;
+    document.getElementById("sec-secure-cookie").checked = !!data.secure_cookie;
+    document.getElementById("sec-csrf").checked = !!data.csrf_enabled;
+    document.getElementById("sec-host").value = data.host || "127.0.0.1";
+    document.getElementById("sec-port").value = data.port || 5050;
+    document.getElementById("sec-origins").value = (data.trusted_origins || []).join("\n");
+    document.getElementById("sec-config-path").textContent = data.config_path || "-";
+    document.getElementById("sec-credential-delivery").textContent = data.credential_delivery || "-";
+    document.getElementById("sec-legacy-config").textContent = data.legacy_config_exists
+      ? (data.legacy_config_path || "存在旧版配置文件")
+      : "未发现";
+    document.getElementById("sec-token-status").textContent = data.has_api_token ? "已配置" : "未配置";
+  }
+
+  function readSecurity() {
+    return {
+      username: document.getElementById("sec-username").value.trim(),
+      new_password: document.getElementById("sec-password").value,
+      session_minutes: Number(document.getElementById("sec-session-minutes").value || 480),
+      login_rate_limit: Number(document.getElementById("sec-rate-limit").value || 8),
+      login_window_seconds: Number(document.getElementById("sec-rate-window").value || 900),
+      secure_cookie: document.getElementById("sec-secure-cookie").checked,
+      csrf_enabled: document.getElementById("sec-csrf").checked,
+      trusted_origins: document.getElementById("sec-origins").value,
+      host: document.getElementById("sec-host").value.trim(),
+      port: Number(document.getElementById("sec-port").value || 5050),
+    };
+  }
+
+  async function loadSecurity() {
+    const resp = await api("/api/security");
+    fillSecurity(resp.data || {});
+  }
+
+  async function rotateToken() {
+    try {
+      const payload = readSecurity();
+      payload.rotate_api_token = true;
+      const resp = await api("/api/security", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      fillSecurity((resp.data || {}).summary || {});
+      document.getElementById("sec-token-output").textContent = (resp.data || {}).new_api_token
+        ? `新的 API Token（仅此显示一次）：${resp.data.new_api_token}`
+        : "Token 未变化";
+      showToast("API Token 已更新");
+    } catch (err) {
+      showToast(err.message || "更新失败", "error");
+    }
+  }
+
+  document.getElementById("security-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/security", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(readSecurity()),
+      });
+      fillSecurity((resp.data || {}).summary || {});
+      document.getElementById("sec-password").value = "";
+      document.getElementById("sec-token-output").textContent = "安全配置已更新。若修改了密码，下次登录请使用新密码。";
+      showToast("安全配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadSecurity().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}

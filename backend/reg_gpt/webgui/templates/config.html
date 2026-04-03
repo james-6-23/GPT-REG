@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>配置中心</h2>
+  <p class="panel-desc">直接管理主程序配置文件 <code>Program/Reg-GPT/reg_config.toml</code>。</p>
+  <form id="config-form" class="form-grid">
+    <div class="field span-2">
+      <label>Worker URL</label>
+      <input id="worker_url" type="text" />
+    </div>
+    <div class="field">
+      <label>邮箱域名</label>
+      <input id="email_domain" type="text" />
+    </div>
+    <div class="field">
+      <label>API Secret</label>
+      <input id="api_secret" type="text" />
+    </div>
+    <div class="field span-2">
+      <label>代理</label>
+      <input id="proxy" type="text" placeholder="例如 http://127.0.0.1:7890" />
+    </div>
+    <div class="field">
+      <label>最短等待（秒）</label>
+      <input id="sleep_min" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>最长等待（秒）</label>
+      <input id="sleep_max" type="number" min="1" />
+    </div>
+    <div class="field">
+      <label>成功目标</label>
+      <input id="max_success" type="number" min="0" />
+    </div>
+    <div class="field">
+      <label>并发数</label>
+      <input id="workers" type="number" min="1" />
+    </div>
+    <div class="field checkbox-group span-2">
+      <label><input id="once" type="checkbox" /> 单次运行后自动停止</label>
+    </div>
+    <div class="toolbar span-2">
+      <button class="btn primary" type="submit">保存配置</button>
+      <button class="btn secondary" type="button" onclick="loadConfig()">重新加载</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function fillConfig(cfg) {
+    document.getElementById("worker_url").value = cfg.cloudflare.worker_url || "";
+    document.getElementById("email_domain").value = cfg.cloudflare.email_domain || "";
+    document.getElementById("api_secret").value = cfg.cloudflare.api_secret || "";
+    document.getElementById("proxy").value = cfg.network.proxy || "";
+    document.getElementById("sleep_min").value = cfg.run.sleep_min ?? 5;
+    document.getElementById("sleep_max").value = cfg.run.sleep_max ?? 30;
+    document.getElementById("max_success").value = cfg.run.max_success ?? 0;
+    document.getElementById("workers").value = cfg.run.workers ?? 1;
+    document.getElementById("once").checked = !!cfg.run.once;
+  }
+
+  function readConfig() {
+    return {
+      cloudflare: {
+        worker_url: document.getElementById("worker_url").value.trim(),
+        email_domain: document.getElementById("email_domain").value.trim(),
+        api_secret: document.getElementById("api_secret").value.trim(),
+      },
+      network: {
+        proxy: document.getElementById("proxy").value.trim(),
+      },
+      run: {
+        sleep_min: Number(document.getElementById("sleep_min").value || 5),
+        sleep_max: Number(document.getElementById("sleep_max").value || 30),
+        max_success: Number(document.getElementById("max_success").value || 0),
+        workers: Number(document.getElementById("workers").value || 1),
+        once: document.getElementById("once").checked,
+      },
+    };
+  }
+
+  async function loadConfig() {
+    const resp = await api("/api/config");
+    fillConfig(resp.config);
+  }
+
+  document.getElementById("config-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const resp = await api("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: readConfig() }),
+      });
+      fillConfig(resp.config);
+      showToast("配置已保存");
+    } catch (err) {
+      showToast(err.message || "保存失败", "error");
+    }
+  });
+
+  loadConfig().catch(err => showToast(err.message || "加载失败", "error"));
+</script>
+{% endblock %}
