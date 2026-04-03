@@ -211,7 +211,11 @@ function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange
             )}
 
             {ptype === 'tempmail_lol' && (
-              <TextField label="API 地址" value={String(pg(name, 'api_base') ?? 'https://api.tempmail.lol/v2')} onChange={v => sp(name, 'api_base', v)} />
+              <>
+                <TextField label="API 地址" value={String(pg(name, 'api_base') ?? 'https://api.tempmail.lol/v2')} onChange={v => sp(name, 'api_base', v)} />
+                <TextField label="API Key" desc="可选，填写后使用 Bearer 认证，支持自定义域名" value={String(pg(name, 'api_key') ?? '')} onChange={v => sp(name, 'api_key', v)} placeholder="留空则免认证" />
+                <TextField label="自定义域名" desc="可选，指定创建邮箱时使用的域名（需 API Key）" value={String(pg(name, 'domain') ?? '')} onChange={v => sp(name, 'domain', v)} placeholder="留空则自动分配" />
+              </>
             )}
 
             {ptype === 'lamail' && (

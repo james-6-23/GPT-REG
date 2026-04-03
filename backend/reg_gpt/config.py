@@ -144,6 +144,8 @@ enabled = false
 type = "tempmail_lol"
 label = "TempMail.lol"
 api_base = "https://api.tempmail.lol/v2"
+api_key = ""
+domain = ""
 
 [email.providers.lamail]
 enabled = false
@@ -442,6 +444,8 @@ def _default_provider_block(name: str) -> Dict[str, Any]:
             'type': 'tempmail_lol',
             'label': 'TempMail.lol',
             'api_base': 'https://api.tempmail.lol/v2',
+            'api_key': '',
+            'domain': '',
             'entries': [],
         },
         'lamail': {
@@ -518,6 +522,8 @@ def _normalize_email_entry(provider_type: str, raw: Dict[str, Any] | None, defau
 
     if provider_type == 'tempmail_lol':
         normalized['api_base'] = _safe_string(data.get('api_base') or defaults.get('api_base') or 'https://api.tempmail.lol/v2').rstrip('/')
+        normalized['api_key'] = _safe_string(data.get('api_key') or defaults.get('api_key'))
+        normalized['domain'] = _safe_string(data.get('domain') or defaults.get('domain'))
         return normalized
 
     if provider_type == 'lamail':
@@ -562,7 +568,11 @@ def _derive_provider_fields_from_entry(provider_type: str, entry: Dict[str, Any]
             'email_domain': _safe_string(entry.get('email_domain')),
         }
     if provider_type == 'tempmail_lol':
-        return {'api_base': _safe_string(entry.get('api_base'))}
+        return {
+            'api_base': _safe_string(entry.get('api_base')),
+            'api_key': _safe_string(entry.get('api_key')),
+            'domain': _safe_string(entry.get('domain')),
+        }
     if provider_type == 'lamail':
         return {
             'api_base': _safe_string(entry.get('api_base')),
@@ -811,6 +821,8 @@ def _dump_provider_lines(provider_name: str, provider: Dict[str, Any]) -> List[s
             if provider_type == 'tempmail_lol':
                 lines.extend([
                     f"api_base = {_quote_toml(str(entry.get('api_base') or ''))}",
+                    f"api_key = {_quote_toml(str(entry.get('api_key') or ''))}",
+                    f"domain = {_quote_toml(str(entry.get('domain') or ''))}",
                     '',
                 ])
                 continue

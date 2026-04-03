@@ -337,9 +337,21 @@ def create_email_account(
 
     if provider_type == "tempmail_lol":
         api_base = str(provider.get("api_base") or "https://api.tempmail.lol/v2").strip().rstrip("/")
+        headers = {"Accept": "application/json", "User-Agent": "TempMailPythonAPI/3.0"}
+        api_key = str(provider.get("api_key") or "").strip()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        create_body: Dict[str, Any] = {}
+        domain = str(provider.get("domain") or "").strip()
+        if domain:
+            create_body["domain"] = domain
+        prefix = str(provider.get("prefix") or "").strip()
+        if prefix:
+            create_body["prefix"] = prefix
         resp = requests.post(
             f"{api_base}/inbox/create",
-            json={},
+            json=create_body,
+            headers=headers,
             proxies=proxies,
             timeout=15,
             impersonate=impersonate,
@@ -430,10 +442,15 @@ def _fetch_duckmail_message_detail(msg_id: str, mail_token: str, provider: Dict[
 def _fetch_tempmail_messages(mail_token: str, provider: Dict[str, Any], proxy: Optional[str], impersonate: str) -> List[Dict[str, Any]]:
     api_base = str(provider.get("api_base") or "https://api.tempmail.lol/v2").strip().rstrip("/")
     proxies: Any = {"http": proxy, "https": proxy} if proxy else None
+    headers = {"Accept": "application/json", "User-Agent": "TempMailPythonAPI/3.0"}
+    api_key = str(provider.get("api_key") or "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         resp = requests.get(
             f"{api_base}/inbox",
             params={"token": mail_token},
+            headers=headers,
             proxies=proxies,
             timeout=15,
             impersonate=impersonate,
