@@ -204,7 +204,7 @@ function CodexProxyForm({ data, onChange }: { data: Record<string, unknown>; onC
     <>
       <SectionTitle>CodexProxy 连接</SectionTitle>
       <ToggleField label="启用 CodexProxy" desc="开启后注册成功的 refresh_token 自动上传到 CodexProxy 号池" value={Boolean(get(data, 'codex_proxy.enabled'))} onChange={v => s('codex_proxy.enabled', v)} />
-      <TextField label="服务地址" desc="CodexProxy 的地址，如 http://64.31.33.173:2003" value={String(get(data, 'codex_proxy.base_url') ?? '')} onChange={v => s('codex_proxy.base_url', v)} placeholder="http://host:port" />
+      <TextField label="服务地址" desc="CodexProxy 的 API 地址" value={String(get(data, 'codex_proxy.base_url') ?? '')} onChange={v => s('codex_proxy.base_url', v)} placeholder="http://host:port" />
       <TextField label="Admin Key" desc="X-Admin-Key 认证密钥" value={String(get(data, 'codex_proxy.admin_key') ?? '')} onChange={v => s('codex_proxy.admin_key', v)} />
       <TextField label="上传代理" desc="上传时使用的代理地址（留空则跟随全局代理）" value={String(get(data, 'codex_proxy.upload_proxy_url') ?? '')} onChange={v => s('codex_proxy.upload_proxy_url', v)} placeholder="http://127.0.0.1:7890" />
       <ToggleField label="成功后自动上传" desc="注册成功后自动将 refresh_token 上传到 CodexProxy" value={Boolean(get(data, 'codex_proxy.auto_sync_on_success'))} onChange={v => s('codex_proxy.auto_sync_on_success', v)} />
