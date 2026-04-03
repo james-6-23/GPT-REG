@@ -1,5 +1,4 @@
 import os
-from datetime import timedelta
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from reg_gpt.cpa_service import (
@@ -29,20 +28,8 @@ from reg_gpt.webgui.state import (
 from reg_gpt.webgui.process_manager import process_manager
 from reg_gpt.webgui.security import (
     apply_security_headers,
-    authenticate_user,
-    clear_login_failures,
     get_security_summary,
     get_settings,
-    issue_csrf_token,
-    load_or_create_security_config,
-    login_allowed,
-    login_user,
-    logout_user,
-    record_login_failure,
-    reset_session_auth,
-    require_auth,
-    resolve_session_cookie_secure,
-    secure_compare,
     update_security_settings,
 )
 
@@ -52,12 +39,10 @@ BACKEND_ROOT = os.path.dirname(os.path.dirname(BASE_DIR))
 
 def _find_frontend_dist() -> str:
     """查找前端 dist 目录，兼容本地开发和 Docker 部署两种目录结构。"""
-    # 本地开发: backend/reg_gpt/webgui/ -> backend/ -> gptreg/ -> gptreg/frontend/dist
     project_root = os.path.dirname(BACKEND_ROOT)
     candidate = os.path.join(project_root, "frontend", "dist")
     if os.path.isdir(candidate):
         return candidate
-    # Docker 部署: /opt/reg-gpt/reg_gpt/webgui/ -> /opt/reg-gpt/ -> /opt/reg-gpt/frontend/dist
     candidate = os.path.join(BACKEND_ROOT, "frontend", "dist")
     if os.path.isdir(candidate):
         return candidate
@@ -73,12 +58,14 @@ app = Flask(
 )
 _settings = get_settings()
 app.secret_key = _settings.session_secret
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=_settings.secure_cookie,
-    PERMANENT_SESSION_LIFETIME=_settings.session_minutes * 60,
-)
+
+
+@app.after_request
+def add_security_headers(response):
+    return apply_security_headers(response)
+
+
+# ─── 旧 Jinja2 页面路由（仅在无新前端时使用） ───
 
 
 def _nav_items() -> list[dict]:
@@ -117,185 +104,105 @@ def _render(page_title: str, template: str, **kwargs):
         template,
         page_title=page_title,
         nav_items=_nav_items(),
-        current_user=session.get("username", ""),
+        current_user="",
         **kwargs,
     )
 
 
-@app.context_processor
-def inject_csrf_token():
-    return {"csrf_token": issue_csrf_token()}
-
-
-def _refresh_runtime_security_config() -> None:
-    settings = get_settings()
-    app.config["SESSION_COOKIE_SECURE"] = resolve_session_cookie_secure(settings)
-    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=settings.session_minutes)
-
-
-@app.before_request
-def prepare_request():
-    _refresh_runtime_security_config()
-    issue_csrf_token()
-
-
-@app.after_request
-def add_security_headers(response):
-    return apply_security_headers(response)
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login_page():
-    if request.method == "GET":
-        if session.get("authenticated"):
-            return redirect(url_for("dashboard_page"))
-        return render_template("login.html", page_title="安全登录")
-
-    allowed, message = login_allowed()
-    if not allowed:
-        return render_template("login.html", page_title="安全登录", error_message=message), 429
-
-    form_csrf = str(request.form.get("csrf_token") or "").strip()
-    if not form_csrf or not secure_compare(form_csrf, session.get("csrf_token", "")):
-        reset_session_auth()
-        return (
-            render_template(
-                "login.html",
-                page_title="安全登录",
-                error_message="登录会话已失效，表单已自动刷新，请重新输入后再试",
-            ),
-            403,
-        )
-
-    username = str(request.form.get("username") or "").strip()
-    password = str(request.form.get("password") or "")
-    if not authenticate_user(username, password):
-        record_login_failure()
-        return render_template("login.html", page_title="安全登录", error_message="用户名或密码错误"), 401
-
-    clear_login_failures()
-    login_user()
-    target = request.args.get("next") or url_for("dashboard_page")
-    return redirect(target)
-
-
-@app.route("/logout", methods=["POST"])
-@require_auth
-def logout_page():
-    logout_user()
-    return redirect(url_for("login_page"))
-
-
 @app.route("/")
-@require_auth
 def dashboard_page():
     return _render("主程序总览", "dashboard.html")
 
 
 @app.route("/config")
-@require_auth
 def config_page():
     return redirect(url_for("config_basic_page"))
 
 
 @app.route("/config/basic")
-@require_auth
 def config_basic_page():
     return _render("基础配置", "config_basic.html", config_tabs=_config_tabs())
 
 
 @app.route("/config/email")
-@require_auth
 def config_email_page():
     return _render("邮箱设置", "config_email.html", config_tabs=_config_tabs())
 
 
 @app.route("/config/email-domains")
-@require_auth
 def config_email_domains_page():
     return _render("邮箱域名", "config_email_domains.html", config_tabs=_config_tabs())
 
 
 @app.route("/config/network")
-@require_auth
 def config_network_page():
     return _render("网络设置", "config_network.html", config_tabs=_config_tabs())
 
 
 @app.route("/config/cpa")
-@require_auth
 def config_cpa_page():
     return _render("CPA连接", "config_cpa.html", config_tabs=_config_tabs())
 
 
 @app.route("/config/runtime")
-@require_auth
 def config_runtime_page():
     return _render("运行设置", "config_runtime.html", config_tabs=_config_tabs())
 
 
 @app.route("/security")
-@require_auth
 def security_page():
     return _render("安全设置", "security.html")
 
 
 @app.route("/control")
-@require_auth
 def control_page():
     return _render("运行控制", "control.html")
 
 
 @app.route("/logs")
-@require_auth
 def logs_page():
     return _render("日志监控", "logs.html")
 
 
 @app.route("/results")
-@require_auth
 def results_page():
     return _render("结果概览", "results.html")
 
 
 @app.route("/cpa")
-@require_auth
 def cpa_page():
     return redirect(url_for("cpa_overview_page"))
 
 
 @app.route("/cpa/overview")
-@require_auth
 def cpa_overview_page():
     return _render("CPA概览", "cpa_overview.html", cpa_tabs=_cpa_tabs())
 
 
 @app.route("/cpa/accounts")
-@require_auth
 def cpa_accounts_page():
     return _render("CPA账号管理", "cpa_accounts.html", cpa_tabs=_cpa_tabs())
 
 
 @app.route("/cpa/health")
-@require_auth
 def cpa_health_page():
     return _render("CPA健康清理", "cpa_health.html", cpa_tabs=_cpa_tabs())
 
 
+# ─── JSON API ───
+
+
 @app.route("/api/dashboard")
-@require_auth
 def api_dashboard():
     return jsonify(status="success", data=build_dashboard_data())
 
 
 @app.route("/api/config", methods=["GET"])
-@require_auth
 def api_get_config():
     return jsonify(status="success", config=read_config())
 
 
 @app.route("/api/config", methods=["POST"])
-@require_auth
 def api_save_config():
     payload = request.get_json(silent=True) or {}
     config_data = payload.get("config") if isinstance(payload, dict) else None
@@ -308,7 +215,6 @@ def api_save_config():
 
 
 @app.route("/api/config/<section>", methods=["GET"])
-@require_auth
 def api_get_config_section(section: str):
     try:
         data = read_config_section(section)
@@ -318,7 +224,6 @@ def api_get_config_section(section: str):
 
 
 @app.route("/api/config/<section>", methods=["POST"])
-@require_auth
 def api_save_config_section(section: str):
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
@@ -331,7 +236,6 @@ def api_save_config_section(section: str):
 
 
 @app.route("/api/email/weights/reset", methods=["POST"])
-@require_auth
 def api_email_weights_reset():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
@@ -353,7 +257,6 @@ def api_email_weights_reset():
 
 
 @app.route("/api/email/domains/toggle", methods=["POST"])
-@require_auth
 def api_email_domains_toggle():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
@@ -370,19 +273,16 @@ def api_email_domains_toggle():
 
 
 @app.route("/api/results")
-@require_auth
 def api_results():
     return jsonify(status="success", data=build_results_data())
 
 
 @app.route("/api/cpa/overview")
-@require_auth
 def api_cpa_overview():
     return jsonify(status="success", data=build_cpa_overview())
 
 
 @app.route("/api/cpa/accounts")
-@require_auth
 def api_cpa_accounts():
     try:
         page = max(1, int(request.args.get("page", 1)))
@@ -412,7 +312,6 @@ def api_cpa_accounts():
 
 
 @app.route("/api/cpa/test", methods=["POST"])
-@require_auth
 def api_cpa_test():
     try:
         data = test_cpa_connection(force_reload=True)
@@ -422,7 +321,6 @@ def api_cpa_test():
 
 
 @app.route("/api/cpa/sync", methods=["POST"])
-@require_auth
 def api_cpa_sync():
     payload = request.get_json(silent=True) or {}
     try:
@@ -437,7 +335,6 @@ def api_cpa_sync():
 
 
 @app.route("/api/cpa/health/check", methods=["POST"])
-@require_auth
 def api_cpa_health_check():
     payload = request.get_json(silent=True) or {}
     names = payload.get("names") if isinstance(payload, dict) else None
@@ -451,7 +348,6 @@ def api_cpa_health_check():
 
 
 @app.route("/api/cpa/health/start", methods=["POST"])
-@require_auth
 def api_cpa_health_start():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
@@ -468,7 +364,6 @@ def api_cpa_health_start():
 
 
 @app.route("/api/cpa/health/status")
-@require_auth
 def api_cpa_health_status():
     try:
         data = get_remote_health_task_status()
@@ -478,7 +373,6 @@ def api_cpa_health_status():
 
 
 @app.route("/api/cpa/health/cleanup", methods=["POST"])
-@require_auth
 def api_cpa_health_cleanup():
     payload = request.get_json(silent=True) or {}
     names = payload.get("names") if isinstance(payload, dict) else None
@@ -492,7 +386,6 @@ def api_cpa_health_cleanup():
 
 
 @app.route("/api/cpa/accounts/delete", methods=["POST"])
-@require_auth
 def api_cpa_accounts_delete():
     payload = request.get_json(silent=True) or {}
     names = payload.get("names") if isinstance(payload, dict) else None
@@ -506,7 +399,6 @@ def api_cpa_accounts_delete():
 
 
 @app.route("/api/cpa/accounts/toggle", methods=["POST"])
-@require_auth
 def api_cpa_accounts_toggle():
     payload = request.get_json(silent=True) or {}
     names = payload.get("names") if isinstance(payload, dict) else None
@@ -521,7 +413,6 @@ def api_cpa_accounts_toggle():
 
 
 @app.route("/api/cpa/accounts/fields", methods=["POST"])
-@require_auth
 def api_cpa_accounts_fields():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
@@ -550,13 +441,11 @@ def api_cpa_accounts_fields():
 
 
 @app.route("/api/security", methods=["GET"])
-@require_auth
 def api_security():
     return jsonify(status="success", data=get_security_summary())
 
 
 @app.route("/api/security", methods=["POST"])
-@require_auth
 def api_security_save():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
@@ -566,7 +455,6 @@ def api_security_save():
 
 
 @app.route("/api/logs")
-@require_auth
 def api_logs():
     try:
         limit = max(20, min(1000, int(request.args.get("limit", 200))))
@@ -576,13 +464,11 @@ def api_logs():
 
 
 @app.route("/api/control")
-@require_auth
 def api_control():
     return jsonify(status="success", data=build_control_data())
 
 
 @app.route("/api/control/start", methods=["POST"])
-@require_auth
 def api_control_start():
     result = process_manager.start()
     code = 200 if result.get("ok") else 400
@@ -592,7 +478,6 @@ def api_control_start():
 
 
 @app.route("/api/control/stop", methods=["POST"])
-@require_auth
 def api_control_stop():
     result = process_manager.stop()
     code = 200 if result.get("ok") else 400
@@ -602,7 +487,6 @@ def api_control_stop():
 
 
 @app.route("/api/control/restart", methods=["POST"])
-@require_auth
 def api_control_restart():
     stop_result = process_manager.stop()
     start_result = process_manager.start()
@@ -619,7 +503,6 @@ def api_control_restart():
 
 
 @app.route("/api/control/logs/delete", methods=["POST"])
-@require_auth
 def api_control_logs_delete():
     result = process_manager.clear_log()
     code = 200 if result.get("ok") else 400
@@ -628,40 +511,13 @@ def api_control_logs_delete():
     return jsonify(payload), code
 
 
-@app.route("/api/auth/check")
-def api_auth_check():
-    if session.get("authenticated"):
-        return jsonify(status="success", authenticated=True)
-    return jsonify(status="error", authenticated=False), 401
-
-
-@app.route("/api/login", methods=["POST"])
-def api_login():
-    payload = request.get_json(silent=True) or {}
-    username = str(payload.get("username") or "").strip()
-    password = str(payload.get("password") or "")
-
-    allowed, message = login_allowed()
-    if not allowed:
-        return jsonify(status="error", message=message), 429
-
-    if not authenticate_user(username, password):
-        record_login_failure()
-        return jsonify(status="error", message="用户名或密码错误"), 401
-
-    clear_login_failures()
-    login_user()
-    return jsonify(status="success", message="登录成功")
-
-
-@app.route("/api/logout", methods=["POST"])
-def api_logout():
-    logout_user()
-    return jsonify(status="success", message="已退出登录")
+# ─── 新前端 SPA 托管 ───
 
 
 if os.path.isdir(FRONTEND_DIST):
     from flask import send_from_directory
+
+    _USE_NEW_FRONTEND = True
 
     @app.route("/app/")
     @app.route("/app/<path:path>")
@@ -673,6 +529,24 @@ if os.path.isdir(FRONTEND_DIST):
     @app.route("/assets/<path:path>")
     def serve_frontend_assets(path):
         return send_from_directory(os.path.join(FRONTEND_DIST, "assets"), path)
+else:
+    _USE_NEW_FRONTEND = False
+
+
+@app.before_request
+def _redirect_to_spa():
+    """新前端存在时，将旧页面路由重定向到 SPA。"""
+    if not _USE_NEW_FRONTEND:
+        return None
+    path = request.path
+    if path.startswith(("/api/", "/app/", "/assets/", "/static/")):
+        return None
+    if request.method != "GET":
+        return None
+    if path in ("/", "/login", "/config", "/control", "/logs", "/results",
+                 "/security", "/cpa", "/cpa/overview", "/cpa/accounts", "/cpa/health") \
+       or path.startswith(("/config/", "/cpa/")):
+        return redirect("/app/")
 
 
 def main() -> None:

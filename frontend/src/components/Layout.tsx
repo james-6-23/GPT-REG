@@ -24,7 +24,7 @@ const navDefs: NavDef[] = [
   { to: '/results', label: '结果概览', icon: <FileCheck className="size-[18px]" />, end: true },
 ]
 
-export default function Layout({ children, onLogout }: PropsWithChildren<{ onLogout: () => void }>) {
+export default function Layout({ children }: PropsWithChildren) {
   const { theme, toggle } = useTheme()
   const [spinning, setSpinning] = useState(false)
 
@@ -97,12 +97,6 @@ export default function Layout({ children, onLogout }: PropsWithChildren<{ onLog
                     {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
                   </span>
                 </button>
-                <button
-                  onClick={onLogout}
-                  className="flex items-center justify-center px-3 py-1.5 rounded-xl text-[12px] font-bold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
-                >
-                  退出
-                </button>
               </div>
             </div>
           </div>
@@ -127,12 +121,6 @@ export default function Layout({ children, onLogout }: PropsWithChildren<{ onLog
                 <span className={`inline-flex transition-transform duration-500 ease-out ${spinning ? 'rotate-[360deg] scale-110' : 'rotate-0 scale-100'}`}>
                   {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
                 </span>
-              </button>
-              <button
-                onClick={onLogout}
-                className="text-[12px] font-bold text-muted-foreground hover:text-destructive px-2 py-1"
-              >
-                退出
               </button>
             </div>
           </header>

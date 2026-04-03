@@ -1,7 +1,5 @@
 import type { ApiResponse, DashboardData, ResultsData, ControlData, LogsData, SecuritySummary, CpaAccountsData } from './types'
 
-export const AUTH_REQUIRED_EVENT = 'reggpt:auth-required'
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
   if (options.body !== undefined && options.body !== null && !headers.has('Content-Type')) {
@@ -13,11 +11,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers,
     credentials: 'same-origin',
   })
-
-  if (res.status === 401 || res.status === 302) {
-    window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
-    throw new Error('登录已过期，请重新登录')
-  }
 
   if (!res.ok) {
     const body = await res.text()
@@ -35,24 +28,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  // Auth
-  login: (username: string, password: string, _csrfToken?: string) =>
-    fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-      credentials: 'same-origin',
-    }),
-
-  logout: (_csrfToken?: string) =>
-    fetch('/api/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-    }),
-
-  checkAuth: () =>
-    fetch('/api/auth/check', { credentials: 'same-origin' }).then(res => res.ok),
-
   // Dashboard
   getDashboard: () =>
     request<ApiResponse<DashboardData>>('/api/dashboard').then(r => r.data!),
