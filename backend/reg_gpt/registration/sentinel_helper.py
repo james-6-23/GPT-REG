@@ -3,7 +3,11 @@ import os
 import time
 from typing import List, Optional
 
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+    _HAS_PLAYWRIGHT = True
+except ImportError:
+    _HAS_PLAYWRIGHT = False
 
 from reg_gpt.registration.context import RegistrationContext
 
@@ -30,6 +34,10 @@ def preload_sentinel_tokens(ctx: RegistrationContext, flows: Optional[List[str]]
     使用 Playwright 模拟浏览器运行 Sentinel SDK，一次性预取多个 Flow 的 Token。
     同步浏览器产生的 Cookies 到请求 Session 中，确保会话一致性。
     """
+    if not _HAS_PLAYWRIGHT:
+        ctx.info(f"{ctx.tag}Playwright 未安装，跳过 Sentinel 预取（将使用传统模式生成）")
+        return False
+
     target_flows = flows or DEFAULT_FLOWS
     proxy_server = ctx.proxy or ""
 
