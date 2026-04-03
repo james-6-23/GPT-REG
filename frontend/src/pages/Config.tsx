@@ -113,6 +113,21 @@ function BasicForm({ data, onChange }: { data: Record<string, unknown>; onChange
 
 function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
   const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  const providers = (get(data, 'email.providers') ?? {}) as Record<string, Record<string, unknown>>
+  const providerNames = Object.keys(providers)
+
+  const sp = (name: string, field: string, v: unknown) => s(`email.providers.${name}.${field}`, v)
+  const pg = (name: string, field: string) => get(data, `email.providers.${name}.${field}`)
+
+  const PROVIDER_LABELS: Record<string, string> = {
+    mailapi_pool: '域名池邮箱',
+    cfmail: 'CFMail 账号池',
+    cloudflare: 'Cloudflare 邮箱',
+    duckmail: 'DuckMail',
+    tempmail_lol: 'TempMail.lol',
+    lamail: 'LaMail',
+  }
+
   return (
     <>
       <SectionTitle>邮箱选择</SectionTitle>
@@ -137,6 +152,78 @@ function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange
       <NumberField label="最高分数" value={Number(get(data, 'email.weight.max_score') ?? 200)} onChange={v => s('email.weight.max_score', v)} min={1} />
       <NumberField label="成功加分" desc="每次成功后增加的分数" value={Number(get(data, 'email.weight.success_delta') ?? 8)} onChange={v => s('email.weight.success_delta', v)} min={1} />
       <NumberField label="失败扣分" desc="每次失败后扣除的分数" value={Number(get(data, 'email.weight.failure_delta') ?? 20)} onChange={v => s('email.weight.failure_delta', v)} min={1} />
+
+      {providerNames.map(name => {
+        const ptype = String(pg(name, 'type') ?? name)
+        const label = PROVIDER_LABELS[ptype] || String(pg(name, 'label') ?? name)
+        return (
+          <div key={name} className="mt-6 pt-4 border-t border-border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold">{label}</h3>
+              <button
+                onClick={() => sp(name, 'enabled', !pg(name, 'enabled'))}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                  pg(name, 'enabled') ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {pg(name, 'enabled') ? <ToggleRight className="size-4" /> : <ToggleLeft className="size-4" />}
+                {pg(name, 'enabled') ? '启用' : '禁用'}
+              </button>
+            </div>
+
+            {ptype === 'mailapi_pool' && (
+              <>
+                <TextField label="API 地址" value={String(pg(name, 'api_base') ?? '')} onChange={v => sp(name, 'api_base', v)} placeholder="https://mailapi.example.com" />
+                <TextField label="API Key" value={String(pg(name, 'api_key') ?? '')} onChange={v => sp(name, 'api_key', v)} />
+                <Field label="域名列表" desc="每行一个域名，支持通配符 *.xxx.com">
+                  <textarea
+                    value={Array.isArray(pg(name, 'domains')) ? (pg(name, 'domains') as string[]).join('\n') : ''}
+                    onChange={e => sp(name, 'domains', e.target.value.split('\n').map(l => l.trim()).filter(Boolean))}
+                    className="w-[320px] h-[120px] px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono resize-y"
+                    placeholder="*.example.com&#10;mail.test.com"
+                  />
+                </Field>
+              </>
+            )}
+
+            {ptype === 'cfmail' && (
+              <>
+                <TextField label="Profile" value={String(pg(name, 'profile') ?? 'auto')} onChange={v => sp(name, 'profile', v)} />
+                <NumberField label="失败阈值" desc="连续失败几次后冷却" value={Number(pg(name, 'fail_threshold') ?? 3)} onChange={v => sp(name, 'fail_threshold', v)} min={1} />
+                <NumberField label="冷却时间 (秒)" value={Number(pg(name, 'cooldown_seconds') ?? 1800)} onChange={v => sp(name, 'cooldown_seconds', v)} min={0} />
+              </>
+            )}
+
+            {ptype === 'cloudflare' && (
+              <>
+                <TextField label="Worker URL" value={String(pg(name, 'worker_url') ?? '')} onChange={v => sp(name, 'worker_url', v)} placeholder="https://your-worker.workers.dev" />
+                <TextField label="邮箱域名" value={String(pg(name, 'email_domain') ?? '')} onChange={v => sp(name, 'email_domain', v)} placeholder="example.com" />
+                <TextField label="API Secret" value={String(pg(name, 'api_secret') ?? '')} onChange={v => sp(name, 'api_secret', v)} />
+              </>
+            )}
+
+            {ptype === 'duckmail' && (
+              <>
+                <TextField label="API 地址" value={String(pg(name, 'api_base') ?? 'https://api.duckmail.sbs')} onChange={v => sp(name, 'api_base', v)} />
+                <TextField label="Bearer Token" value={String(pg(name, 'bearer') ?? '')} onChange={v => sp(name, 'bearer', v)} />
+                <TextField label="邮箱域名" value={String(pg(name, 'email_domain') ?? 'duckmail.sbs')} onChange={v => sp(name, 'email_domain', v)} />
+              </>
+            )}
+
+            {ptype === 'tempmail_lol' && (
+              <TextField label="API 地址" value={String(pg(name, 'api_base') ?? 'https://api.tempmail.lol/v2')} onChange={v => sp(name, 'api_base', v)} />
+            )}
+
+            {ptype === 'lamail' && (
+              <>
+                <TextField label="API 地址" value={String(pg(name, 'api_base') ?? 'https://maliapi.215.im/v1')} onChange={v => sp(name, 'api_base', v)} />
+                <TextField label="API Key" value={String(pg(name, 'api_key') ?? '')} onChange={v => sp(name, 'api_key', v)} />
+                <TextField label="域名" value={String(pg(name, 'domain') ?? '')} onChange={v => sp(name, 'domain', v)} placeholder="留空则自动分配" />
+              </>
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }
