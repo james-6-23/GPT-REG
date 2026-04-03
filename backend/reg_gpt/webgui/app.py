@@ -1,6 +1,13 @@
 import os
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
+from reg_gpt.codex_proxy_service import (
+    delete_codex_proxy_account,
+    list_codex_proxy_accounts,
+    test_codex_proxy_connection,
+    upload_batch_accounts,
+    upload_single_account,
+)
 from reg_gpt.cpa_service import (
     cleanup_marked_unusable_remote_accounts,
     delete_remote_accounts,
@@ -435,6 +442,75 @@ def api_cpa_accounts_fields():
 
     try:
         data = update_remote_account_fields(name=name, priority=priority, note=note, force_reload=True)
+    except Exception as exc:
+        return jsonify(status="error", message=str(exc)), 400
+    return jsonify(status="success", data=data)
+
+
+# ─── CodexProxy API ───
+
+
+@app.route("/api/codex-proxy/test", methods=["POST"])
+def api_codex_proxy_test():
+    try:
+        data = test_codex_proxy_connection(force_reload=True)
+    except Exception as exc:
+        return jsonify(status="error", message=str(exc)), 400
+    return jsonify(status="success", data=data)
+
+
+@app.route("/api/codex-proxy/accounts")
+def api_codex_proxy_accounts():
+    try:
+        accounts = list_codex_proxy_accounts(force_reload=True)
+    except Exception as exc:
+        return jsonify(status="error", message=str(exc)), 400
+    return jsonify(status="success", data={"accounts": accounts, "total": len(accounts)})
+
+
+@app.route("/api/codex-proxy/upload", methods=["POST"])
+def api_codex_proxy_upload():
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(status="error", message="请求体必须是 JSON 对象"), 400
+
+    # 批量模式：refresh_tokens 用换行分隔
+    refresh_tokens = str(payload.get("refresh_tokens") or "").strip()
+    if refresh_tokens:
+        name_prefix = str(payload.get("name_prefix") or "reg").strip()
+        proxy_url = str(payload.get("proxy_url") or "").strip()
+        try:
+            data = upload_batch_accounts(
+                refresh_tokens=refresh_tokens,
+                name_prefix=name_prefix,
+                proxy_url=proxy_url,
+                force_reload=True,
+            )
+        except Exception as exc:
+            return jsonify(status="error", message=str(exc)), 400
+        return jsonify(status="success", data=data)
+
+    # 单个模式
+    name = str(payload.get("name") or "").strip()
+    refresh_token = str(payload.get("refresh_token") or "").strip()
+    if not name or not refresh_token:
+        return jsonify(status="error", message="name 和 refresh_token 不能为空"), 400
+    proxy_url = str(payload.get("proxy_url") or "").strip()
+    try:
+        data = upload_single_account(name=name, refresh_token=refresh_token, proxy_url=proxy_url, force_reload=True)
+    except Exception as exc:
+        return jsonify(status="error", message=str(exc)), 400
+    return jsonify(status="success", data=data)
+
+
+@app.route("/api/codex-proxy/accounts/delete", methods=["POST"])
+def api_codex_proxy_delete():
+    payload = request.get_json(silent=True) or {}
+    name = str((payload or {}).get("name") or "").strip()
+    if not name:
+        return jsonify(status="error", message="name 不能为空"), 400
+    try:
+        data = delete_codex_proxy_account(name, force_reload=True)
     except Exception as exc:
         return jsonify(status="error", message=str(exc)), 400
     return jsonify(status="success", data=data)

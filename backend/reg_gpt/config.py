@@ -172,6 +172,14 @@ max_active_probes = 120
 auto_sync_on_success = true
 health_probe_mode = "auto"
 
+[codex_proxy]
+enabled = false
+base_url = ""
+admin_key = ""
+upload_proxy_url = ""
+auto_sync_on_success = true
+timeout = 15
+
 [run]
 sleep_min = 5
 sleep_max = 30
@@ -611,6 +619,7 @@ def normalize_config(data: Dict[str, Any] | None) -> Dict[str, Any]:
     legacy_cf_cfg = raw.get('cloudflare') if isinstance(raw.get('cloudflare'), dict) else {}
     net_cfg = raw.get('network') if isinstance(raw.get('network'), dict) else {}
     cpa_cfg = raw.get('cpa') if isinstance(raw.get('cpa'), dict) else {}
+    cp_cfg = raw.get('codex_proxy') if isinstance(raw.get('codex_proxy'), dict) else {}
     run_cfg = raw.get('run') if isinstance(raw.get('run'), dict) else {}
     webui_cfg = raw.get('webui') if isinstance(raw.get('webui'), dict) else raw.get('server') if isinstance(raw.get('server'), dict) else {}
     oauth_cfg = raw.get('oauth') if isinstance(raw.get('oauth'), dict) else {}
@@ -679,6 +688,14 @@ def normalize_config(data: Dict[str, Any] | None) -> Dict[str, Any]:
             'max_active_probes': _safe_int(cpa_cfg.get('max_active_probes'), 120, 0),
             'auto_sync_on_success': _safe_bool(cpa_cfg.get('auto_sync_on_success', True), True),
             'health_probe_mode': _normalize_choice(cpa_cfg.get('health_probe_mode'), 'auto', {'auto', 'openai', 'codex'}),
+        },
+        'codex_proxy': {
+            'enabled': _safe_bool(cp_cfg.get('enabled', False), False),
+            'base_url': str(cp_cfg.get('base_url') or '').strip(),
+            'admin_key': str(cp_cfg.get('admin_key') or '').strip(),
+            'upload_proxy_url': str(cp_cfg.get('upload_proxy_url') or '').strip(),
+            'auto_sync_on_success': _safe_bool(cp_cfg.get('auto_sync_on_success', True), True),
+            'timeout': _safe_int(cp_cfg.get('timeout'), 15, 1),
         },
         'run': {
             'sleep_min': sleep_min,
@@ -820,6 +837,7 @@ def dump_config_toml(cfg: Dict[str, Any]) -> str:
     weight_cfg = email_cfg['weight']
     net_cfg = normalized['network']
     cpa_cfg = normalized['cpa']
+    cp_cfg = normalized['codex_proxy']
     run_cfg = normalized['run']
     webui_cfg = normalized['webui']
     oauth_cfg = normalized['oauth']
@@ -870,6 +888,14 @@ def dump_config_toml(cfg: Dict[str, Any]) -> str:
         f"max_active_probes = {int(cpa_cfg['max_active_probes'])}",
         f"auto_sync_on_success = {'true' if cpa_cfg['auto_sync_on_success'] else 'false'}",
         f"health_probe_mode = {_quote_toml(cpa_cfg['health_probe_mode'])}",
+        '',
+        '[codex_proxy]',
+        f"enabled = {'true' if cp_cfg['enabled'] else 'false'}",
+        f"base_url = {_quote_toml(cp_cfg['base_url'])}",
+        f"admin_key = {_quote_toml(cp_cfg['admin_key'])}",
+        f"upload_proxy_url = {_quote_toml(cp_cfg['upload_proxy_url'])}",
+        f"auto_sync_on_success = {'true' if cp_cfg['auto_sync_on_success'] else 'false'}",
+        f"timeout = {int(cp_cfg['timeout'])}",
         '',
         '[run]',
         f"sleep_min = {int(run_cfg['sleep_min'])}",

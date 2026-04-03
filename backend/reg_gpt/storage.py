@@ -182,6 +182,18 @@ def save_token_result(token_json: str, reg_email: str, reg_password: str) -> str
         enqueue_sync_token_file(file_name)
     except Exception:
         pass
+
+    # CodexProxy 自动同步
+    try:
+        from .codex_proxy_service import enqueue_codex_proxy_sync
+
+        enqueue_codex_proxy_sync(
+            name=os.path.splitext(os.path.basename(file_name))[0],
+            refresh_token=str(token_data.get("refresh_token") or "").strip(),
+        )
+    except Exception:
+        pass
+
     return os.path.basename(file_name)
 
 

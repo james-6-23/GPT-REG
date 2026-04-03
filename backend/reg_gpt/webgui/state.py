@@ -63,6 +63,8 @@ def read_config_section(section: str) -> Dict[str, Any]:
         return {"network": cfg["network"]}
     if key == "cpa":
         return {"cpa": cfg["cpa"]}
+    if key == "codex_proxy" or key == "codex-proxy":
+        return {"codex_proxy": cfg["codex_proxy"]}
     if key == "runtime":
         return {
             "run": cfg["run"],
@@ -90,6 +92,8 @@ def write_config_section(section: str, data: Dict[str, Any]) -> Dict[str, Any]:
         payload = {"network": (data or {}).get("network") or {}}
     elif key == "cpa":
         payload = {"cpa": (data or {}).get("cpa") or {}}
+    elif key in ("codex_proxy", "codex-proxy"):
+        payload = {"codex_proxy": (data or {}).get("codex_proxy") or {}}
     elif key == "runtime":
         email_data = (data or {}).get("email") or {}
         payload = {

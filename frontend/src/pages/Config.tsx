@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Save, RotateCcw, ToggleLeft, ToggleRight } from 'lucide-react'
 import type { DomainWeightItem } from '../types'
 
-type Tab = 'basic' | 'email' | 'email-domains' | 'network' | 'cpa' | 'runtime'
+type Tab = 'basic' | 'email' | 'email-domains' | 'network' | 'cpa' | 'codex-proxy' | 'runtime'
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'basic', label: '基础配置' },
@@ -20,6 +20,7 @@ const tabs: { key: Tab; label: string }[] = [
   { key: 'email-domains', label: '邮箱域名' },
   { key: 'network', label: '网络设置' },
   { key: 'cpa', label: 'CPA连接' },
+  { key: 'codex-proxy', label: 'CodexProxy' },
   { key: 'runtime', label: '运行设置' },
 ]
 
@@ -197,6 +198,21 @@ function CpaForm({ data, onChange }: { data: Record<string, unknown>; onChange: 
   )
 }
 
+function CodexProxyForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
+  const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  return (
+    <>
+      <SectionTitle>CodexProxy 连接</SectionTitle>
+      <ToggleField label="启用 CodexProxy" desc="开启后注册成功的 refresh_token 自动上传到 CodexProxy 号池" value={Boolean(get(data, 'codex_proxy.enabled'))} onChange={v => s('codex_proxy.enabled', v)} />
+      <TextField label="服务地址" desc="CodexProxy 的地址，如 http://64.31.33.173:2003" value={String(get(data, 'codex_proxy.base_url') ?? '')} onChange={v => s('codex_proxy.base_url', v)} placeholder="http://host:port" />
+      <TextField label="Admin Key" desc="X-Admin-Key 认证密钥" value={String(get(data, 'codex_proxy.admin_key') ?? '')} onChange={v => s('codex_proxy.admin_key', v)} />
+      <TextField label="上传代理" desc="上传时使用的代理地址（留空则跟随全局代理）" value={String(get(data, 'codex_proxy.upload_proxy_url') ?? '')} onChange={v => s('codex_proxy.upload_proxy_url', v)} placeholder="http://127.0.0.1:7890" />
+      <ToggleField label="成功后自动上传" desc="注册成功后自动将 refresh_token 上传到 CodexProxy" value={Boolean(get(data, 'codex_proxy.auto_sync_on_success'))} onChange={v => s('codex_proxy.auto_sync_on_success', v)} />
+      <NumberField label="超时 (秒)" value={Number(get(data, 'codex_proxy.timeout') ?? 15)} onChange={v => s('codex_proxy.timeout', v)} min={1} />
+    </>
+  )
+}
+
 function RuntimeForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
   const s = (p: string, v: unknown) => onChange(set(data, p, v))
   return (
@@ -277,6 +293,7 @@ export default function Config() {
       case 'email': return <EmailForm data={currentData} onChange={onChange} />
       case 'network': return <NetworkForm data={currentData} onChange={onChange} />
       case 'cpa': return <CpaForm data={currentData} onChange={onChange} />
+      case 'codex-proxy': return <CodexProxyForm data={currentData} onChange={onChange} />
       case 'runtime': return <RuntimeForm data={currentData} onChange={onChange} />
       default: return null
     }

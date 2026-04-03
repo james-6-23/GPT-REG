@@ -142,4 +142,23 @@ export const api = {
 
   controlAction: (action: string) =>
     request<Record<string, unknown>>(`/api/control/${action}`, { method: 'POST' }),
+
+  // CodexProxy
+  testCodexProxy: () =>
+    request<ApiResponse>('/api/codex-proxy/test', { method: 'POST' }),
+
+  getCodexProxyAccounts: () =>
+    request<ApiResponse>('/api/codex-proxy/accounts').then(r => r.data),
+
+  uploadCodexProxy: (payload: { refresh_tokens?: string; name?: string; refresh_token?: string; name_prefix?: string; proxy_url?: string }) =>
+    request<ApiResponse>('/api/codex-proxy/upload', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteCodexProxyAccount: (name: string) =>
+    request<ApiResponse>('/api/codex-proxy/accounts/delete', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
 }
