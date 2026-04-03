@@ -23,6 +23,202 @@ const tabs: { key: Tab; label: string }[] = [
   { key: 'runtime', label: '运行设置' },
 ]
 
+// ─── 通用字段组件 ───
+
+function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-border last:border-0">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        {desc && <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  )
+}
+
+function NumberField({ label, desc, value, onChange, min, max }: {
+  label: string; desc?: string; value: number; onChange: (v: number) => void; min?: number; max?: number
+}) {
+  return (
+    <Field label={label} desc={desc}>
+      <Input type="number" value={value} min={min} max={max} onChange={e => onChange(Number(e.target.value))} className="w-[140px]" />
+    </Field>
+  )
+}
+
+function TextField({ label, desc, value, onChange, placeholder }: {
+  label: string; desc?: string; value: string; onChange: (v: string) => void; placeholder?: string
+}) {
+  return (
+    <Field label={label} desc={desc}>
+      <Input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-[280px]" />
+    </Field>
+  )
+}
+
+function ToggleField({ label, desc, value, onChange }: {
+  label: string; desc?: string; value: boolean; onChange: (v: boolean) => void
+}) {
+  return (
+    <Field label={label} desc={desc}>
+      <button
+        onClick={() => onChange(!value)}
+        className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+          value ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'
+        }`}
+      >
+        {value ? <ToggleRight className="size-4" /> : <ToggleLeft className="size-4" />}
+        {value ? '启用' : '禁用'}
+      </button>
+    </Field>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-base font-semibold text-foreground pt-4 pb-2 first:pt-0">{children}</h3>
+}
+
+// ─── 辅助：安全读取嵌套字段 ───
+
+function get(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce((o: any, k) => (o && typeof o === 'object' ? o[k] : undefined), obj)
+}
+
+function set(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
+  const draft = JSON.parse(JSON.stringify(obj))
+  const keys = path.split('.')
+  let cur = draft
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (!cur[keys[i]] || typeof cur[keys[i]] !== 'object') cur[keys[i]] = {}
+    cur = cur[keys[i]]
+  }
+  cur[keys[keys.length - 1]] = value
+  return draft
+}
+
+// ─── 各 Tab 专用表单 ───
+
+function BasicForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
+  const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  return (
+    <>
+      <SectionTitle>WebUI 服务</SectionTitle>
+      <TextField label="监听地址" desc="WebUI 绑定的 IP，0.0.0.0 允许外部访问" value={String(get(data, 'webui.host') ?? '127.0.0.1')} onChange={v => s('webui.host', v)} placeholder="127.0.0.1" />
+      <NumberField label="端口" desc="WebUI 监听端口" value={Number(get(data, 'webui.port') ?? 5050)} onChange={v => s('webui.port', v)} min={1} max={65535} />
+    </>
+  )
+}
+
+function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
+  const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  return (
+    <>
+      <SectionTitle>邮箱选择</SectionTitle>
+      <Field label="选择模式" desc="random_enabled = 加权随机，first_enabled = 选第一个启用的">
+        <select
+          value={String(get(data, 'email.selection_mode') ?? 'random_enabled')}
+          onChange={e => s('email.selection_mode', e.target.value)}
+          className="w-[200px] h-9 px-3 rounded-lg border border-input bg-background text-sm"
+        >
+          <option value="random_enabled">加权随机</option>
+          <option value="first_enabled">优先选择</option>
+        </select>
+      </Field>
+
+      <SectionTitle>OTP 验证码</SectionTitle>
+      <NumberField label="等待超时 (秒)" desc="首次等待验证码的最大时间" value={Number(get(data, 'email.otp.wait_timeout_seconds') ?? 120)} onChange={v => s('email.otp.wait_timeout_seconds', v)} min={10} />
+      <NumberField label="重试超时 (秒)" desc="验证码失败后重试等待时间" value={Number(get(data, 'email.otp.retry_wait_timeout_seconds') ?? 60)} onChange={v => s('email.otp.retry_wait_timeout_seconds', v)} min={10} />
+
+      <SectionTitle>权重评分</SectionTitle>
+      <NumberField label="默认分数" value={Number(get(data, 'email.weight.default_score') ?? 100)} onChange={v => s('email.weight.default_score', v)} min={1} />
+      <NumberField label="最低分数" value={Number(get(data, 'email.weight.min_score') ?? 20)} onChange={v => s('email.weight.min_score', v)} min={1} />
+      <NumberField label="最高分数" value={Number(get(data, 'email.weight.max_score') ?? 200)} onChange={v => s('email.weight.max_score', v)} min={1} />
+      <NumberField label="成功加分" desc="每次成功后增加的分数" value={Number(get(data, 'email.weight.success_delta') ?? 8)} onChange={v => s('email.weight.success_delta', v)} min={1} />
+      <NumberField label="失败扣分" desc="每次失败后扣除的分数" value={Number(get(data, 'email.weight.failure_delta') ?? 20)} onChange={v => s('email.weight.failure_delta', v)} min={1} />
+    </>
+  )
+}
+
+function NetworkForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
+  const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  return (
+    <>
+      <SectionTitle>网络代理</SectionTitle>
+      <ToggleField label="启用代理" desc="注册请求是否走代理" value={Boolean(get(data, 'network.enabled'))} onChange={v => s('network.enabled', v)} />
+      <TextField label="代理地址" desc="HTTP(S) 代理 URL" value={String(get(data, 'network.proxy') ?? '')} onChange={v => s('network.proxy', v)} placeholder="http://127.0.0.1:7890" />
+    </>
+  )
+}
+
+function CpaForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
+  const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  return (
+    <>
+      <SectionTitle>CPA 连接</SectionTitle>
+      <ToggleField label="启用 CPA" desc="开启后注册成功的 Token 自动同步到 CPA 站点" value={Boolean(get(data, 'cpa.enabled'))} onChange={v => s('cpa.enabled', v)} />
+      <TextField label="管理地址" desc="CPA 站点的管理 URL" value={String(get(data, 'cpa.management_url') ?? '')} onChange={v => s('cpa.management_url', v)} placeholder="https://your-cpa-site.com" />
+      <TextField label="管理 Token" desc="CPA 站点的认证 Token" value={String(get(data, 'cpa.management_token') ?? '')} onChange={v => s('cpa.management_token', v)} />
+
+      <SectionTitle>上传代理</SectionTitle>
+      <Field label="上传代理模式" desc="Token 上传时使用的代理策略">
+        <select
+          value={String(get(data, 'cpa.upload_proxy_mode') ?? 'default')}
+          onChange={e => s('cpa.upload_proxy_mode', e.target.value)}
+          className="w-[160px] h-9 px-3 rounded-lg border border-input bg-background text-sm"
+        >
+          <option value="default">默认</option>
+          <option value="direct">直连</option>
+          <option value="custom">自定义</option>
+        </select>
+      </Field>
+      <TextField label="自定义代理" desc="upload_proxy_mode = custom 时使用" value={String(get(data, 'cpa.custom_proxy') ?? '')} onChange={v => s('cpa.custom_proxy', v)} />
+      <NumberField label="超时 (秒)" value={Number(get(data, 'cpa.timeout') ?? 15)} onChange={v => s('cpa.timeout', v)} min={1} />
+
+      <SectionTitle>健康探测</SectionTitle>
+      <ToggleField label="主动探测" desc="是否主动检测远程账号健康状态" value={Boolean(get(data, 'cpa.active_probe'))} onChange={v => s('cpa.active_probe', v)} />
+      <Field label="探测模式" desc="auto = OpenAI + Codex 双探测">
+        <select
+          value={String(get(data, 'cpa.health_probe_mode') ?? 'auto')}
+          onChange={e => s('cpa.health_probe_mode', e.target.value)}
+          className="w-[140px] h-9 px-3 rounded-lg border border-input bg-background text-sm"
+        >
+          <option value="auto">自动</option>
+          <option value="openai">OpenAI</option>
+          <option value="codex">Codex</option>
+        </select>
+      </Field>
+      <NumberField label="探测超时 (秒)" value={Number(get(data, 'cpa.probe_timeout') ?? 8)} onChange={v => s('cpa.probe_timeout', v)} min={1} />
+      <NumberField label="探测并发数" value={Number(get(data, 'cpa.probe_workers') ?? 12)} onChange={v => s('cpa.probe_workers', v)} min={1} />
+      <NumberField label="删除并发数" value={Number(get(data, 'cpa.delete_workers') ?? 8)} onChange={v => s('cpa.delete_workers', v)} min={1} />
+      <NumberField label="最大探测数" desc="0 = 不限制" value={Number(get(data, 'cpa.max_active_probes') ?? 120)} onChange={v => s('cpa.max_active_probes', v)} min={0} />
+      <ToggleField label="成功后自动同步" value={Boolean(get(data, 'cpa.auto_sync_on_success'))} onChange={v => s('cpa.auto_sync_on_success', v)} />
+    </>
+  )
+}
+
+function RuntimeForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
+  const s = (p: string, v: unknown) => onChange(set(data, p, v))
+  return (
+    <>
+      <SectionTitle>运行参数</SectionTitle>
+      <NumberField label="并发数" desc="同时运行的注册 Worker 数量" value={Number(get(data, 'run.workers') ?? 1)} onChange={v => s('run.workers', v)} min={1} />
+      <NumberField label="目标数量" desc="注册成功多少个后停止，0 = 不限" value={Number(get(data, 'run.max_success') ?? 0)} onChange={v => s('run.max_success', v)} min={0} />
+      <ToggleField label="单次模式" desc="开启后每个 Worker 只注册一次" value={Boolean(get(data, 'run.once'))} onChange={v => s('run.once', v)} />
+
+      <SectionTitle>注册间隔</SectionTitle>
+      <NumberField label="最小间隔 (秒)" desc="两次注册之间的最短等待时间" value={Number(get(data, 'run.sleep_min') ?? 5)} onChange={v => s('run.sleep_min', v)} min={1} />
+      <NumberField label="最大间隔 (秒)" desc="两次注册之间的最长等待时间" value={Number(get(data, 'run.sleep_max') ?? 30)} onChange={v => s('run.sleep_max', v)} min={1} />
+
+      <SectionTitle>OTP 超时</SectionTitle>
+      <NumberField label="等待超时 (秒)" value={Number(get(data, 'email.otp.wait_timeout_seconds') ?? 120)} onChange={v => s('email.otp.wait_timeout_seconds', v)} min={10} />
+      <NumberField label="重试超时 (秒)" value={Number(get(data, 'email.otp.retry_wait_timeout_seconds') ?? 60)} onChange={v => s('email.otp.retry_wait_timeout_seconds', v)} min={10} />
+    </>
+  )
+}
+
+// ─── 主组件 ───
+
 export default function Config() {
   const [tab, setTab] = useState<Tab>('basic')
   const { toast, showToast } = useToast()
@@ -37,18 +233,6 @@ export default function Config() {
   const [formData, setFormData] = useState<Record<string, unknown> | null>(null)
 
   const currentData = formData ?? data
-
-  const handleFieldChange = (path: string, value: unknown) => {
-    const draft = JSON.parse(JSON.stringify(currentData || {}))
-    const keys = path.split('.')
-    let obj = draft
-    for (let i = 0; i < keys.length - 1; i++) {
-      if (!obj[keys[i]]) obj[keys[i]] = {}
-      obj = obj[keys[i]]
-    }
-    obj[keys[keys.length - 1]] = value
-    setFormData(draft)
-  }
 
   const handleSave = async () => {
     if (!currentData) return
@@ -85,6 +269,19 @@ export default function Config() {
     }
   }
 
+  const renderForm = () => {
+    if (!currentData) return null
+    const onChange = (d: Record<string, unknown>) => setFormData(d)
+    switch (tab) {
+      case 'basic': return <BasicForm data={currentData} onChange={onChange} />
+      case 'email': return <EmailForm data={currentData} onChange={onChange} />
+      case 'network': return <NetworkForm data={currentData} onChange={onChange} />
+      case 'cpa': return <CpaForm data={currentData} onChange={onChange} />
+      case 'runtime': return <RuntimeForm data={currentData} onChange={onChange} />
+      default: return null
+    }
+  }
+
   return (
     <>
       <ToastNotice toast={toast} />
@@ -116,9 +313,9 @@ export default function Config() {
             />
           ) : (
             <Card>
-              <CardContent className="p-6 space-y-4">
-                {currentData && renderFields(currentData, '', handleFieldChange)}
-                <div className="flex gap-3 pt-4 border-t border-border">
+              <CardContent className="p-6">
+                {renderForm()}
+                <div className="flex gap-3 pt-5 mt-4 border-t border-border">
                   <Button onClick={handleSave} disabled={saving}>
                     <Save className="size-4" />
                     {saving ? '保存中…' : '保存配置'}
@@ -137,69 +334,7 @@ export default function Config() {
   )
 }
 
-function renderFields(
-  data: Record<string, unknown>,
-  prefix: string,
-  onChange: (path: string, value: unknown) => void,
-  depth = 0
-): React.ReactNode {
-  const skipKeys = ['providers', 'enabled_count', 'config_path', 'domain_weight_items', 'domain_weight_summary']
-  return Object.entries(data).map(([key, value]) => {
-    if (skipKeys.includes(key)) return null
-    const path = prefix ? `${prefix}.${key}` : key
-
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      return (
-        <div key={path} className={depth > 0 ? 'ml-4 pl-4 border-l border-border' : ''}>
-          <h4 className="text-sm font-semibold text-foreground mb-3 mt-2">{key}</h4>
-          {renderFields(value as Record<string, unknown>, path, onChange, depth + 1)}
-        </div>
-      )
-    }
-
-    if (typeof value === 'boolean') {
-      return (
-        <div key={path} className="flex items-center justify-between py-2">
-          <label className="text-sm text-foreground">{key}</label>
-          <button
-            onClick={() => onChange(path, !value)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              value ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            {value ? '启用' : '禁用'}
-          </button>
-        </div>
-      )
-    }
-
-    if (typeof value === 'number') {
-      return (
-        <div key={path} className="flex items-center justify-between gap-4 py-2">
-          <label className="text-sm text-foreground shrink-0">{key}</label>
-          <Input
-            type="number"
-            value={value}
-            onChange={e => onChange(path, Number(e.target.value))}
-            className="max-w-[200px]"
-          />
-        </div>
-      )
-    }
-
-    return (
-      <div key={path} className="flex items-center justify-between gap-4 py-2">
-        <label className="text-sm text-foreground shrink-0">{key}</label>
-        <Input
-          type="text"
-          value={String(value ?? '')}
-          onChange={e => onChange(path, e.target.value)}
-          className="max-w-[400px]"
-        />
-      </div>
-    )
-  })
-}
+// ─── 邮箱域名 Tab ───
 
 function EmailDomainsSection({
   data,
