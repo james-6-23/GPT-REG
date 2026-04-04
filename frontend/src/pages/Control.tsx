@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import PageHeader from '../components/PageHeader'
 import StateShell from '../components/StateShell'
@@ -11,15 +11,28 @@ import { Badge } from '@/components/ui/badge'
 import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock } from 'lucide-react'
 import type { ControlData } from '../types'
 
+const POLL_INTERVAL = 3000
+
 export default function Control() {
   const { toast, showToast } = useToast()
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const load = useCallback(() => api.getControl(), [])
-  const { data, loading, error, reload } = useDataLoader<ControlData | null>({
+  const { data, loading, error, reload, reloadSilently } = useDataLoader<ControlData | null>({
     initialData: null,
     load,
   })
+
+  // 自动轮询：运行中时 3 秒刷新一次
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      void reloadSilently()
+    }, POLL_INTERVAL)
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [reloadSilently])
 
   const handleAction = async (action: string) => {
     setActionLoading(action)
@@ -48,10 +61,11 @@ export default function Control() {
       <StateShell variant="page" loading={loading} error={error} onRetry={reload}>
         {data && (
           <div className="space-y-6">
+            {/* 引擎状态 */}
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-base font-semibold mb-4">引擎状态</h3>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
                   <InfoBlock icon={<Activity className="size-5" />} iconBg="bg-emerald-500/10 text-emerald-500" label="状态" value={
                     <Badge variant={data.running ? 'default' : 'secondary'} className={data.running ? 'bg-emerald-500 text-white' : ''}>
                       {data.running ? '运行中' : '已停止'}
@@ -66,6 +80,7 @@ export default function Control() {
               </CardContent>
             </Card>
 
+            {/* 控制按钮 */}
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-base font-semibold mb-4">控制操作</h3>
@@ -89,24 +104,27 @@ export default function Control() {
               </CardContent>
             </Card>
 
+            {/* 工作线程 - 两列网格 */}
             {data.worker_slots && data.worker_slots.length > 0 && (
               <Card>
                 <CardContent className="p-6">
                   <h3 className="text-base font-semibold mb-4">工作线程 ({data.worker_slots.length})</h3>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-3">
                     {data.worker_slots.map(slot => (
                       <div key={slot.worker_id} className="p-4 rounded-xl bg-muted/50 border border-border">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-semibold">线程 #{slot.worker_id}</span>
                           <div className="flex items-center gap-2">
-                            {slot.phase && <Badge variant="outline">{slot.phase}</Badge>}
-                            {slot.email && <span className="text-xs text-muted-foreground">{slot.email}</span>}
+                            {slot.phase && <Badge variant="outline" className="text-[11px]">{slot.phase}</Badge>}
                           </div>
                         </div>
+                        {slot.email && (
+                          <div className="text-xs text-muted-foreground mb-2 truncate">{slot.email}</div>
+                        )}
                         {slot.lines.length > 0 && (
-                          <div className="log-viewer bg-background/50 rounded-lg p-3 max-h-[120px] overflow-auto">
+                          <div className="log-viewer bg-background/50 rounded-lg p-2 max-h-[100px] overflow-auto">
                             {slot.lines.map((line, i) => (
-                              <div key={i} className="text-muted-foreground">{line}</div>
+                              <div key={i} className="text-xs text-muted-foreground leading-relaxed font-mono">{line}</div>
                             ))}
                           </div>
                         )}
@@ -125,7 +143,7 @@ export default function Control() {
 
 function InfoBlock({ icon, iconBg, label, value }: { icon: React.ReactNode; iconBg: string; label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/50">
+    <div className="flex items-center gap-3 p-3.5 rounded-xl bg-muted/50">
       <div className={`flex items-center justify-center size-10 rounded-lg ${iconBg}`}>
         {icon}
       </div>
