@@ -1,5 +1,7 @@
+import json
 import os
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+import time
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 
 from reg_gpt.codex_proxy_service import (
     delete_codex_proxy_account,
@@ -542,6 +544,34 @@ def api_logs():
 @app.route("/api/control")
 def api_control():
     return jsonify(status="success", data=build_control_data())
+
+
+@app.route("/api/control/stream")
+def api_control_stream():
+    """SSE 端点：实时推送运行控制状态。"""
+    from reg_gpt.runtime_state import RUNTIME_STATE_PATH
+
+    def generate():
+        last_mtime = 0.0
+        while True:
+            try:
+                mtime = os.path.getmtime(RUNTIME_STATE_PATH) if os.path.exists(RUNTIME_STATE_PATH) else 0.0
+            except OSError:
+                mtime = 0.0
+            if mtime != last_mtime:
+                last_mtime = mtime
+                try:
+                    data = build_control_data()
+                    payload = json.dumps({"status": "success", "data": data}, ensure_ascii=False, separators=(",", ":"))
+                    yield f"data: {payload}\n\n"
+                except Exception:
+                    pass
+            time.sleep(1)
+
+    return Response(generate(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
 
 
 @app.route("/api/control/start", methods=["POST"])

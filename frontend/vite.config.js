@@ -18,7 +18,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:25666',
+      '/api': {
+        target: 'http://localhost:25666',
+        changeOrigin: true,
+      },
       '/login': 'http://localhost:25666',
       '/logout': 'http://localhost:25666'
     }

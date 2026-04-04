@@ -8,38 +8,55 @@ import { useToast } from '../hooks/useToast'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock } from 'lucide-react'
+import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock, Radio } from 'lucide-react'
 import type { ControlData } from '../types'
-
-const POLL_INTERVAL = 3000
 
 export default function Control() {
   const { toast, showToast } = useToast()
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [sseConnected, setSseConnected] = useState(false)
 
   const load = useCallback(() => api.getControl(), [])
-  const { data, loading, error, reload, reloadSilently } = useDataLoader<ControlData | null>({
+  const { data, setData, loading, error, reload } = useDataLoader<ControlData | null>({
     initialData: null,
     load,
   })
 
-  // 自动轮询：运行中时 3 秒刷新一次
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // SSE 实时推送
+  const esRef = useRef<EventSource | null>(null)
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      void reloadSilently()
-    }, POLL_INTERVAL)
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+    const es = new EventSource('/api/control/stream')
+    esRef.current = es
+
+    es.onopen = () => setSseConnected(true)
+
+    es.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data)
+        if (parsed.data) {
+          setData(parsed.data as ControlData)
+        }
+      } catch {
+        // 忽略解析错误
+      }
     }
-  }, [reloadSilently])
+
+    es.onerror = () => {
+      setSseConnected(false)
+    }
+
+    return () => {
+      es.close()
+      esRef.current = null
+      setSseConnected(false)
+    }
+  }, [setData])
 
   const handleAction = async (action: string) => {
     setActionLoading(action)
     try {
       const res = await api.controlAction(action)
       showToast(String(res.message || '操作成功'))
-      setTimeout(() => void reload(), 1500)
     } catch (err) {
       showToast(err instanceof Error ? err.message : '操作失败', 'error')
     } finally {
@@ -56,7 +73,12 @@ export default function Control() {
   return (
     <>
       <ToastNotice toast={toast} />
-      <PageHeader title="运行控制" description="管理 Reg-GPT 引擎的启动、停止和重启" onRefresh={reload} />
+      <PageHeader title="运行控制" description="管理 Reg-GPT 引擎的启动、停止和重启" onRefresh={reload} actions={
+        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${sseConnected ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+          <Radio className="size-3.5" />
+          {sseConnected ? '实时' : '离线'}
+        </span>
+      } />
 
       <StateShell variant="page" loading={loading} error={error} onRetry={reload}>
         {data && (
