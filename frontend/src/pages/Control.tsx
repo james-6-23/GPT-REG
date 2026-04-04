@@ -8,7 +8,7 @@ import { useToast } from '../hooks/useToast'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock, Radio } from 'lucide-react'
+import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock, Radio, HardDrive } from 'lucide-react'
 import type { ControlData } from '../types'
 
 export default function Control() {
@@ -98,6 +98,9 @@ export default function Control() {
                   <InfoBlock icon={<Activity className="size-5" />} iconBg="bg-purple-500/10 text-purple-500" label="PID" value={data.pid ? String(data.pid) : '—'} />
                   <InfoBlock icon={<Trophy className="size-5" />} iconBg="bg-emerald-500/10 text-emerald-500" label="成功" value={String(data.successes)} />
                   <InfoBlock icon={<XCircle className="size-5" />} iconBg="bg-red-500/10 text-red-500" label="失败" value={String(data.failures)} />
+                  <InfoBlock icon={<HardDrive className="size-5" />} iconBg="bg-cyan-500/10 text-cyan-500" label="内存" value={
+                    <MemoryDisplay memory={(data as Record<string, unknown>).memory as Record<string, number> | undefined} />
+                  } />
                 </div>
               </CardContent>
             </Card>
@@ -174,5 +177,19 @@ function InfoBlock({ icon, iconBg, label, value }: { icon: React.ReactNode; icon
         <div className="text-sm font-bold mt-0.5">{value}</div>
       </div>
     </div>
+  )
+}
+
+function MemoryDisplay({ memory }: { memory?: Record<string, number> }) {
+  if (!memory || !memory.used_mb) return <span className="text-muted-foreground">—</span>
+  const used = memory.used_mb
+  const limit = memory.limit_mb
+  const pct = memory.percent
+  const color = pct > 80 ? 'text-red-500' : pct > 60 ? 'text-amber-500' : 'text-foreground'
+  return (
+    <span className={color}>
+      {used >= 1024 ? `${(used / 1024).toFixed(1)} GB` : `${used} MB`}
+      {limit > 0 && <span className="text-muted-foreground font-normal"> / {limit >= 1024 ? `${(limit / 1024).toFixed(1)} GB` : `${limit} MB`} ({pct}%)</span>}
+    </span>
   )
 }

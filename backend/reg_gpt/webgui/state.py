@@ -309,11 +309,56 @@ def build_cpa_accounts(
         }
 
 
+def _read_memory_info() -> Dict[str, Any]:
+    """读取容器/进程内存信息（兼容 cgroup v2、cgroup v1 和裸机）。"""
+    info: Dict[str, Any] = {"used_bytes": 0, "limit_bytes": 0, "percent": 0.0, "used_mb": 0, "limit_mb": 0}
+    try:
+        # cgroup v2 (Docker 新版本)
+        usage_path = "/sys/fs/cgroup/memory.current"
+        limit_path = "/sys/fs/cgroup/memory.max"
+        if not os.path.exists(usage_path):
+            # cgroup v1
+            usage_path = "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+            limit_path = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+        if os.path.exists(usage_path):
+            with open(usage_path) as f:
+                used = int(f.read().strip())
+            info["used_bytes"] = used
+            info["used_mb"] = round(used / 1048576)
+        if os.path.exists(limit_path):
+            raw = open(limit_path).read().strip()
+            if raw != "max" and raw.isdigit():
+                limit = int(raw)
+                # 超过 1TB 视为无限制
+                if limit < 1099511627776:
+                    info["limit_bytes"] = limit
+                    info["limit_mb"] = round(limit / 1048576)
+        # 裸机兜底：用 psutil 或 /proc/meminfo
+        if not info["used_bytes"]:
+            import resource
+            # 尝试 /proc/self/status
+            status_path = "/proc/self/status"
+            if os.path.exists(status_path):
+                with open(status_path) as f:
+                    for line in f:
+                        if line.startswith("VmRSS:"):
+                            kb = int(line.split()[1])
+                            info["used_bytes"] = kb * 1024
+                            info["used_mb"] = round(kb / 1024)
+                            break
+        if info["used_bytes"] and info["limit_bytes"]:
+            info["percent"] = round(info["used_bytes"] / info["limit_bytes"] * 100, 1)
+    except Exception:
+        pass
+    return info
+
+
 def build_control_data() -> Dict[str, Any]:
     status = process_manager.status()
     log_exists = bool(status.get("running")) or os.path.exists(LOG_FILE)
     return {
         **status,
+        "memory": _read_memory_info(),
         "actions": [
             {"id": "start", "label": "启动主程序", "enabled": not status.get("running"), "variant": "primary"},
             {"id": "stop", "label": "停止主程序", "enabled": status.get("running"), "variant": "primary"},
