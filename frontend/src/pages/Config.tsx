@@ -113,7 +113,8 @@ function BasicForm({ data, onChange }: { data: Record<string, unknown>; onChange
 
 function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
   const s = (p: string, v: unknown) => onChange(set(data, p, v))
-  const providers = (get(data, 'email.providers') ?? {}) as Record<string, Record<string, unknown>>
+  const rawProviders = get(data, 'email.providers')
+  const providers = (rawProviders && typeof rawProviders === 'object' && !Array.isArray(rawProviders) ? rawProviders : {}) as Record<string, Record<string, unknown>>
   const providerNames = Object.keys(providers)
 
   const sp = (name: string, field: string, v: unknown) => s(`email.providers.${name}.${field}`, v)
@@ -166,8 +167,8 @@ function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange
       <NumberField label="失败扣分" desc="每次失败后扣除的分数" value={Number(get(data, 'email.weight.failure_delta') ?? 20)} onChange={v => s('email.weight.failure_delta', v)} min={1} />
 
       {providerNames.map(name => {
-        const ptype = String(pg(name, 'type') ?? name)
-        const label = PROVIDER_LABELS[ptype] || String(pg(name, 'label') ?? name)
+        const ptype = String(pg(name, 'type') || name)
+        const label = PROVIDER_LABELS[ptype] || PROVIDER_LABELS[name] || String(pg(name, 'label') || name)
         return (
           <div key={name} className="mt-6 pt-4 border-t border-border">
             <div className="flex items-center justify-between mb-3">
