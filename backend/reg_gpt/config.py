@@ -8,42 +8,63 @@ from typing import Any, Dict, List
 
 from reg_gpt.cfmail_pool import normalize_cfmail_accounts, normalize_host
 
+# ─── 路径布局 ───
+# SCRIPT_DIR = backend/   PROJECT_ROOT = gptreg/
+# Docker 容器中 SCRIPT_DIR = /opt/reg-gpt/  PROJECT_ROOT = /opt/
+# 数据目录统一放在 SCRIPT_DIR 同级或 SCRIPT_DIR 下的 data/
+
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _resolve_project_root() -> str:
+    """查找项目根目录：优先找有 data/ 或 config.toml 的那一级。"""
+    parent = os.path.dirname(SCRIPT_DIR)
+    # 本地开发：backend/ 的上一级有 Dockerfile / frontend / config.toml
+    if os.path.isfile(os.path.join(parent, 'Dockerfile')) or os.path.isdir(os.path.join(parent, 'frontend')):
+        return parent
+    # Docker：SCRIPT_DIR 就是根（/opt/reg-gpt/）
+    return SCRIPT_DIR
+
+
+PROJECT_ROOT = _resolve_project_root()
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+TOKEN_DIR = os.path.join(DATA_DIR, 'tokens')
+LOG_DIR = os.path.join(DATA_DIR, 'logs')
+STATE_DIR = DATA_DIR
+DB_PATH = os.path.join(DATA_DIR, 'reg.db')
+
+# 兼容旧路径
 RUNTIME_ROOT = os.path.join(SCRIPT_DIR, 'runtime')
-LOG_DIR = os.path.join(RUNTIME_ROOT, 'logs')
-STATE_DIR = os.path.join(RUNTIME_ROOT, 'state')
-DATA_DIR = os.path.join(RUNTIME_ROOT, 'data')
-TOKEN_DIR = os.path.join(DATA_DIR, 'Token-OpenAi')
-
-
-def _resolve_config_path() -> str:
-    """按优先级查找配置文件位置：项目根目录 > backend 同级 > runtime/config/"""
-    # 本地开发：根目录 reg_config.toml（SCRIPT_DIR = backend/，上一级 = 项目根）
-    project_root = os.path.dirname(SCRIPT_DIR)
-    candidate = os.path.join(project_root, 'reg_config.toml')
-    if os.path.isfile(candidate):
-        return candidate
-    # Docker / 旧布局：SCRIPT_DIR 下直接放
-    candidate = os.path.join(SCRIPT_DIR, 'reg_config.toml')
-    if os.path.isfile(candidate):
-        return candidate
-    # runtime/config/ 下
-    candidate = os.path.join(RUNTIME_ROOT, 'config', 'reg_config.toml')
-    if os.path.isfile(candidate):
-        return candidate
-    # 默认：写到项目根目录
-    return os.path.join(project_root, 'reg_config.toml')
-
-
-CONFIG_PATH = _resolve_config_path()
-CONFIG_DIR = os.path.dirname(CONFIG_PATH)
-RUNTIME_LOG_PATH = os.path.join(LOG_DIR, 'runtime.log')
-
 LEGACY_CONFIG_PATH = os.path.join(SCRIPT_DIR, 'reg_config.toml')
 LEGACY_LOG_PATH = os.path.join(SCRIPT_DIR, 'runtime.log')
 LEGACY_RUNTIME_STATE_PATH = os.path.join(SCRIPT_DIR, 'runtime_state.json')
 LEGACY_CPA_STATE_PATH = os.path.join(SCRIPT_DIR, 'cpa_state.json')
 LEGACY_TOKEN_DIR = os.path.join(SCRIPT_DIR, 'Token-OpenAi')
+LEGACY_RUNTIME_ROOT_STATE = os.path.join(RUNTIME_ROOT, 'state')
+LEGACY_RUNTIME_ROOT_DATA = os.path.join(RUNTIME_ROOT, 'data', 'Token-OpenAi')
+LEGACY_RUNTIME_ROOT_LOG = os.path.join(RUNTIME_ROOT, 'logs')
+LEGACY_RUNTIME_ROOT_CONFIG = os.path.join(RUNTIME_ROOT, 'config', 'reg_config.toml')
+
+
+def _resolve_config_path() -> str:
+    """按优先级查找配置文件：项目根 config.toml > 旧路径兼容。"""
+    candidate = os.path.join(PROJECT_ROOT, 'config.toml')
+    if os.path.isfile(candidate):
+        return candidate
+    # 旧名称兼容
+    for legacy in (
+        os.path.join(PROJECT_ROOT, 'reg_config.toml'),
+        LEGACY_CONFIG_PATH,
+        LEGACY_RUNTIME_ROOT_CONFIG,
+    ):
+        if os.path.isfile(legacy):
+            return legacy
+    return os.path.join(PROJECT_ROOT, 'config.toml')
+
+
+CONFIG_PATH = _resolve_config_path()
+CONFIG_DIR = os.path.dirname(CONFIG_PATH)
+RUNTIME_LOG_PATH = os.path.join(LOG_DIR, 'runtime.log')
 
 _DEFAULT_TRUSTED_ORIGINS = ['http://127.0.0.1:5050', 'http://localhost:5050']
 _PROVIDER_ORDER = ['mailapi_pool', 'cfmail', 'cloudflare', 'duckmail', 'tempmail_lol', 'lamail']
@@ -221,7 +242,7 @@ _CONFIG_PERSIST_RETRY_DELAYS = (0.02, 0.05, 0.1, 0.2, 0.35, 0.5)
 
 
 def ensure_runtime_layout() -> None:
-    for path in (RUNTIME_ROOT, CONFIG_DIR, LOG_DIR, STATE_DIR, DATA_DIR, TOKEN_DIR):
+    for path in (DATA_DIR, TOKEN_DIR, LOG_DIR):
         os.makedirs(path, exist_ok=True)
 
 

@@ -10,7 +10,7 @@ FROM python:3.12-slim
 
 WORKDIR /opt/reg-gpt
 
-# 系统依赖：ca-certificates + Playwright Chromium 运行时所需的库
+# 系统依赖：Playwright Chromium 运行时所需的库
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates \
@@ -29,8 +29,14 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r /tmp/requirements.txt \
     && python -m playwright install chromium
 
+# 后端代码
 COPY backend/openai_reg.py /opt/reg-gpt/openai_reg.py
 COPY backend/reg_gpt /opt/reg-gpt/reg_gpt
+
+# 前端构建产物
 COPY --from=frontend-build /build/dist /opt/reg-gpt/frontend/dist
+
+# 配置模板（首次启动时复制）
+COPY reg_config.example.toml /opt/reg-gpt/reg_config.example.toml
 
 CMD ["python", "-u", "openai_reg.py"]

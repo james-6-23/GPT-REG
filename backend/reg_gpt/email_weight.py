@@ -7,9 +7,11 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from reg_gpt.cfmail_pool import normalize_cfmail_accounts
-from reg_gpt.config import STATE_DIR, ensure_runtime_layout, load_or_create_config, normalize_config
+from reg_gpt.config import DB_PATH, ensure_runtime_layout, load_or_create_config, normalize_config
+from reg_gpt.db import get_state, set_state
 
-WEIGHT_STATE_PATH = os.path.join(STATE_DIR, "email_provider_weights.json")
+WEIGHT_STATE_PATH = DB_PATH
+_DB_KEY = "email_provider_weights"
 _state_lock = threading.RLock()
 _ENTRY_PROVIDER_TYPES = {"mailapi_pool", "cloudflare", "duckmail", "tempmail_lol", "lamail"}
 
@@ -77,31 +79,22 @@ def _default_item(key: str, label: str, settings: Dict[str, int]) -> Dict[str, A
 
 def _load_state_unlocked() -> Dict[str, Any]:
     ensure_runtime_layout()
-    if not os.path.exists(WEIGHT_STATE_PATH):
-        return _default_state()
-    try:
-        with open(WEIGHT_STATE_PATH, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except Exception:
-        return _default_state()
-    if not isinstance(data, dict):
+    raw = get_state(_DB_KEY)
+    if not raw:
         return _default_state()
     state = _default_state()
-    state.update(data)
+    state.update(raw)
     if not isinstance(state.get("providers"), dict):
         state["providers"] = {}
     return state
 
 
 def _save_state_unlocked(state: Dict[str, Any]) -> Dict[str, Any]:
-    ensure_runtime_layout()
     payload = _default_state()
     payload.update(state or {})
     payload["updated_at"] = _now_text()
-    temp_path = f"{WEIGHT_STATE_PATH}.{os.getpid()}.{threading.get_ident()}.tmp"
-    with open(temp_path, "w", encoding="utf-8", newline="\n") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2)
-    os.replace(temp_path, WEIGHT_STATE_PATH)
+    set_state(_DB_KEY, payload)
+    return payload
     return payload
 
 

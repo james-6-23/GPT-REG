@@ -13,12 +13,14 @@ node_modules/
 frontend/dist/
 
 # === 用户私有配置（含密钥，不入库） ===
+config.toml
 reg_config.toml
 
-# === Runtime data ===
-backend/runtime/logs/
-backend/runtime/state/
-backend/runtime/data/
+# === 数据目录（运行时生成） ===
+data/
+
+# === 旧 runtime 目录 ===
+backend/runtime/
 
 # === OS / IDE ===
 .DS_Store

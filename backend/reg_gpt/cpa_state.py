@@ -1,17 +1,14 @@
 import copy
-import json
-import os
-import threading
 from datetime import datetime
 from typing import Any, Dict
 
-from .config import LEGACY_CPA_STATE_PATH, STATE_DIR, _copy_legacy_file_if_missing, ensure_runtime_layout
+from .config import DB_PATH, ensure_runtime_layout
+from .db import get_state, set_state
 
-CPA_STATE_PATH = os.path.join(STATE_DIR, "cpa_state.json")
+CPA_STATE_PATH = DB_PATH
+_DB_KEY = "cpa_state"
 
-_state_lock = threading.Lock()
 ensure_runtime_layout()
-_copy_legacy_file_if_missing(LEGACY_CPA_STATE_PATH, CPA_STATE_PATH)
 
 
 def _default_state() -> Dict[str, Any]:
@@ -55,38 +52,27 @@ def _utc_now_local() -> str:
 
 
 def read_cpa_state() -> Dict[str, Any]:
-    with _state_lock:
-        if not os.path.exists(CPA_STATE_PATH):
-            return _default_state()
-        try:
-            with open(CPA_STATE_PATH, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-        except Exception:
-            return _default_state()
-        if not isinstance(data, dict):
-            return _default_state()
-        state = _default_state()
-        state.update(data)
-        if not isinstance(state.get("remote_health"), dict):
-            state["remote_health"] = {}
-        if not isinstance(state.get("site_test"), dict):
-            state["site_test"] = {}
-        health_task = _default_state()["health_task"]
-        if isinstance(state.get("health_task"), dict):
-            health_task.update(state["health_task"])
-        state["health_task"] = health_task
-        return state
+    raw = get_state(_DB_KEY)
+    if not raw:
+        return _default_state()
+    state = _default_state()
+    state.update(raw)
+    if not isinstance(state.get("remote_health"), dict):
+        state["remote_health"] = {}
+    if not isinstance(state.get("site_test"), dict):
+        state["site_test"] = {}
+    health_task = _default_state()["health_task"]
+    if isinstance(state.get("health_task"), dict):
+        health_task.update(state["health_task"])
+    state["health_task"] = health_task
+    return state
 
 
 def write_cpa_state(state: Dict[str, Any]) -> Dict[str, Any]:
     payload = _default_state()
     payload.update(state or {})
     payload["last_updated_at"] = _utc_now_local()
-
-    with _state_lock:
-        with open(CPA_STATE_PATH, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-
+    set_state(_DB_KEY, payload)
     return copy.deepcopy(payload)
 
 
@@ -134,5 +120,7 @@ def update_health_task(task: Dict[str, Any]) -> Dict[str, Any]:
 
 def read_health_task() -> Dict[str, Any]:
     state = read_cpa_state()
-    task = state.get("health_task")
-    return copy.deepcopy(task if isinstance(task, dict) else _default_state()["health_task"])
+    task = _default_state()["health_task"]
+    if isinstance(state.get("health_task"), dict):
+        task.update(state["health_task"])
+    return task

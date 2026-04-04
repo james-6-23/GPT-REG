@@ -10,4 +10,5 @@ services:
     init: true
     network_mode: host
     volumes:
-      - /Server/Docker/reg-gpt:/opt/reg-gpt/runtime
+      - ./data:/opt/reg-gpt/data
+      - ./config.toml:/opt/reg-gpt/config.toml

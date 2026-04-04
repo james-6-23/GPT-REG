@@ -549,23 +549,20 @@ def api_control():
 @app.route("/api/control/stream")
 def api_control_stream():
     """SSE 端点：实时推送运行控制状态。"""
-    from reg_gpt.runtime_state import RUNTIME_STATE_PATH
 
     def generate():
-        last_mtime = 0.0
+        last_hash = ""
         while True:
             try:
-                mtime = os.path.getmtime(RUNTIME_STATE_PATH) if os.path.exists(RUNTIME_STATE_PATH) else 0.0
-            except OSError:
-                mtime = 0.0
-            if mtime != last_mtime:
-                last_mtime = mtime
-                try:
-                    data = build_control_data()
+                data = build_control_data()
+                # 用 updated_at 作为变化检测，避免每次都序列化完整数据做对比
+                current_hash = str(data.get("updated_at", "")) + str(data.get("successes", 0)) + str(data.get("failures", 0))
+                if current_hash != last_hash:
+                    last_hash = current_hash
                     payload = json.dumps({"status": "success", "data": data}, ensure_ascii=False, separators=(",", ":"))
                     yield f"data: {payload}\n\n"
-                except Exception:
-                    pass
+            except Exception:
+                pass
             time.sleep(1)
 
     return Response(generate(), mimetype="text/event-stream", headers={

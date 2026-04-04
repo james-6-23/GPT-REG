@@ -1,28 +1,17 @@
 import copy
-import json
-import os
-import sys
-import threading
 import time
 from datetime import datetime
 from typing import Any, Callable, Dict
 
-from reg_gpt.config import (
-    CONFIG_PATH,
-    LEGACY_RUNTIME_STATE_PATH,
-    STATE_DIR,
-    _copy_legacy_file_if_missing,
-    ensure_runtime_layout,
-)
+from reg_gpt.config import CONFIG_PATH, DB_PATH, ensure_runtime_layout
+from reg_gpt.db import get_state, mutate_state
 
-RUNTIME_STATE_PATH = os.path.join(STATE_DIR, "runtime_state.json")
-_state_lock = threading.Lock()
+_DB_KEY = "runtime_state"
+RUNTIME_STATE_PATH = DB_PATH
 _MAX_EVENTS = 40
 _MAX_SLOT_LINES = 3
-_PERSIST_RETRY_DELAYS = (0.02, 0.05, 0.1, 0.2, 0.35, 0.5)
 
 ensure_runtime_layout()
-_copy_legacy_file_if_missing(LEGACY_RUNTIME_STATE_PATH, RUNTIME_STATE_PATH)
 
 
 def _fmt_ts(ts: float | None = None) -> str:
@@ -72,21 +61,6 @@ def _default_state() -> Dict[str, Any]:
     }
 
 
-def _is_retryable_state_io_error(exc: Exception) -> bool:
-    if isinstance(exc, PermissionError):
-        return True
-    winerror = getattr(exc, "winerror", None)
-    return winerror == 5
-
-
-def _warn_state_io(action: str, exc: Exception) -> None:
-    try:
-        sys.__stderr__.write(f"[Warn] runtime_state {action} 失败: {exc}\n")
-        sys.__stderr__.flush()
-    except Exception:
-        pass
-
-
 def _normalize_state(data: Dict[str, Any] | None) -> Dict[str, Any]:
     state = _default_state()
     if not isinstance(data, dict):
@@ -104,7 +78,7 @@ def _normalize_state(data: Dict[str, Any] | None) -> Dict[str, Any]:
                 except (TypeError, ValueError):
                     merged_slot["worker_id"] = 0
                 lines = merged_slot.get("lines")
-                merged_slot["lines"] = [str(line) for line in (lines or [])][- _MAX_SLOT_LINES :]
+                merged_slot["lines"] = [str(line) for line in (lines or [])][-_MAX_SLOT_LINES:]
                 slots[str(merged_slot["worker_id"] or wid)] = merged_slot
             state["worker_slots"] = slots
         elif key == "recent_events" and isinstance(value, list):
@@ -126,64 +100,28 @@ def _normalize_state(data: Dict[str, Any] | None) -> Dict[str, Any]:
     return state
 
 
-def _load_state_unlocked() -> Dict[str, Any]:
-    if not os.path.exists(RUNTIME_STATE_PATH):
-        return _default_state()
-    last_exc: Exception | None = None
-    for attempt, delay in enumerate(_PERSIST_RETRY_DELAYS, start=1):
-        try:
-            with open(RUNTIME_STATE_PATH, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            return _normalize_state(data)
-        except Exception as exc:
-            last_exc = exc
-            if _is_retryable_state_io_error(exc) and attempt < len(_PERSIST_RETRY_DELAYS):
-                time.sleep(delay)
-                continue
-            break
-    if last_exc is not None:
-        _warn_state_io("读取", last_exc)
-    return _default_state()
-
-
-def _save_state_unlocked(state: Dict[str, Any]) -> Dict[str, Any]:
-    normalized = _normalize_state(state)
-    normalized["updated_at"] = _fmt_ts(time.time())
-    temp_path = f"{RUNTIME_STATE_PATH}.{os.getpid()}.{threading.get_ident()}.tmp"
-    last_exc: Exception | None = None
-    for attempt, delay in enumerate(_PERSIST_RETRY_DELAYS, start=1):
-        try:
-            with open(temp_path, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(normalized, fh, ensure_ascii=False, indent=2)
-            os.replace(temp_path, RUNTIME_STATE_PATH)
-            last_exc = None
-            break
-        except Exception as exc:
-            last_exc = exc
-            try:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception:
-                pass
-            if _is_retryable_state_io_error(exc) and attempt < len(_PERSIST_RETRY_DELAYS):
-                time.sleep(delay)
-                continue
-            break
-    if last_exc is not None:
-        _warn_state_io("写入", last_exc)
-    return normalized
-
-
 def read_runtime_state() -> Dict[str, Any]:
-    with _state_lock:
-        return copy.deepcopy(_load_state_unlocked())
+    raw = get_state(_DB_KEY)
+    if not raw:
+        return copy.deepcopy(_default_state())
+    return copy.deepcopy(_normalize_state(raw))
 
 
 def _mutate_state(mutator: Callable[[Dict[str, Any]], None]) -> Dict[str, Any]:
-    with _state_lock:
-        state = _load_state_unlocked()
-        mutator(state)
-        return copy.deepcopy(_save_state_unlocked(state))
+    def wrapper(data: Dict[str, Any]) -> None:
+        # 先归一化再修改
+        state = _normalize_state(data)
+        data.clear()
+        data.update(state)
+        mutator(data)
+        data["updated_at"] = _fmt_ts(time.time())
+        # 再次归一化保证格式正确
+        normalized = _normalize_state(data)
+        data.clear()
+        data.update(normalized)
+
+    result = mutate_state(_DB_KEY, wrapper)
+    return copy.deepcopy(result)
 
 
 def initialize_runtime(
