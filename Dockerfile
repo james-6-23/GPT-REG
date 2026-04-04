@@ -25,8 +25,7 @@ COPY requirements.txt /tmp/requirements.txt
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r /tmp/requirements.txt \
-    && python -m playwright install chromium \
-    && python -m playwright install-deps chromium
+    && python -m playwright install chromium
 
 COPY backend/openai_reg.py /opt/reg-gpt/openai_reg.py
 COPY backend/reg_gpt /opt/reg-gpt/reg_gpt
