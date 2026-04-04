@@ -12,14 +12,13 @@ import { Badge } from '@/components/ui/badge'
 import { Save, RotateCcw, ToggleLeft, ToggleRight } from 'lucide-react'
 import type { DomainWeightItem } from '../types'
 
-type Tab = 'basic' | 'email' | 'email-domains' | 'network' | 'cpa' | 'codex-proxy' | 'runtime'
+type Tab = 'basic' | 'email' | 'email-domains' | 'network' | 'codex-proxy' | 'runtime'
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'basic', label: '基础配置' },
   { key: 'email', label: '邮箱设置' },
   { key: 'email-domains', label: '邮箱域名' },
   { key: 'network', label: '网络设置' },
-  { key: 'cpa', label: 'CPA连接' },
   { key: 'codex-proxy', label: 'CodexProxy' },
   { key: 'runtime', label: '运行设置' },
 ]
@@ -256,52 +255,6 @@ function NetworkForm({ data, onChange }: { data: Record<string, unknown>; onChan
   )
 }
 
-function CpaForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
-  const s = (p: string, v: unknown) => onChange(set(data, p, v))
-  return (
-    <>
-      <SectionTitle>CPA 连接</SectionTitle>
-      <ToggleField label="启用 CPA" desc="开启后注册成功的 Token 自动同步到 CPA 站点" value={Boolean(get(data, 'cpa.enabled'))} onChange={v => s('cpa.enabled', v)} />
-      <TextField label="管理地址" desc="CPA 站点的管理 URL" value={String(get(data, 'cpa.management_url') ?? '')} onChange={v => s('cpa.management_url', v)} placeholder="https://your-cpa-site.com" />
-      <TextField label="管理 Token" desc="CPA 站点的认证 Token" value={String(get(data, 'cpa.management_token') ?? '')} onChange={v => s('cpa.management_token', v)} />
-
-      <SectionTitle>上传代理</SectionTitle>
-      <Field label="上传代理模式" desc="Token 上传时使用的代理策略">
-        <select
-          value={String(get(data, 'cpa.upload_proxy_mode') ?? 'default')}
-          onChange={e => s('cpa.upload_proxy_mode', e.target.value)}
-          className="w-[160px] h-9 px-3 rounded-lg border border-input bg-background text-sm"
-        >
-          <option value="default">默认</option>
-          <option value="direct">直连</option>
-          <option value="custom">自定义</option>
-        </select>
-      </Field>
-      <TextField label="自定义代理" desc="upload_proxy_mode = custom 时使用" value={String(get(data, 'cpa.custom_proxy') ?? '')} onChange={v => s('cpa.custom_proxy', v)} />
-      <NumberField label="超时 (秒)" value={Number(get(data, 'cpa.timeout') ?? 15)} onChange={v => s('cpa.timeout', v)} min={1} />
-
-      <SectionTitle>健康探测</SectionTitle>
-      <ToggleField label="主动探测" desc="是否主动检测远程账号健康状态" value={Boolean(get(data, 'cpa.active_probe'))} onChange={v => s('cpa.active_probe', v)} />
-      <Field label="探测模式" desc="auto = OpenAI + Codex 双探测">
-        <select
-          value={String(get(data, 'cpa.health_probe_mode') ?? 'auto')}
-          onChange={e => s('cpa.health_probe_mode', e.target.value)}
-          className="w-[140px] h-9 px-3 rounded-lg border border-input bg-background text-sm"
-        >
-          <option value="auto">自动</option>
-          <option value="openai">OpenAI</option>
-          <option value="codex">Codex</option>
-        </select>
-      </Field>
-      <NumberField label="探测超时 (秒)" value={Number(get(data, 'cpa.probe_timeout') ?? 8)} onChange={v => s('cpa.probe_timeout', v)} min={1} />
-      <NumberField label="探测并发数" value={Number(get(data, 'cpa.probe_workers') ?? 12)} onChange={v => s('cpa.probe_workers', v)} min={1} />
-      <NumberField label="删除并发数" value={Number(get(data, 'cpa.delete_workers') ?? 8)} onChange={v => s('cpa.delete_workers', v)} min={1} />
-      <NumberField label="最大探测数" desc="0 = 不限制" value={Number(get(data, 'cpa.max_active_probes') ?? 120)} onChange={v => s('cpa.max_active_probes', v)} min={0} />
-      <ToggleField label="成功后自动同步" value={Boolean(get(data, 'cpa.auto_sync_on_success'))} onChange={v => s('cpa.auto_sync_on_success', v)} />
-    </>
-  )
-}
-
 function CodexProxyForm({ data, onChange }: { data: Record<string, unknown>; onChange: (d: Record<string, unknown>) => void }) {
   const s = (p: string, v: unknown) => onChange(set(data, p, v))
   return (
@@ -396,7 +349,6 @@ export default function Config() {
       case 'basic': return <BasicForm data={currentData} onChange={onChange} />
       case 'email': return <EmailForm data={currentData} onChange={onChange} />
       case 'network': return <NetworkForm data={currentData} onChange={onChange} />
-      case 'cpa': return <CpaForm data={currentData} onChange={onChange} />
       case 'codex-proxy': return <CodexProxyForm data={currentData} onChange={onChange} />
       case 'runtime': return <RuntimeForm data={currentData} onChange={onChange} />
       default: return null

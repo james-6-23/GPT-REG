@@ -5,7 +5,6 @@ import { useToast } from './hooks/useToast'
 
 import Dashboard from './pages/Dashboard'
 import Config from './pages/Config'
-import Cpa from './pages/Cpa'
 import Security from './pages/Security'
 import Control from './pages/Control'
 import Logs from './pages/Logs'
@@ -21,7 +20,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/config" element={<Config />} />
-          <Route path="/cpa" element={<Cpa />} />
           <Route path="/security" element={<Security />} />
           <Route path="/control" element={<Control />} />
           <Route path="/logs" element={<Logs />} />

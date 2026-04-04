@@ -1,4 +1,4 @@
-import type { ApiResponse, DashboardData, ResultsData, ControlData, LogsData, SecuritySummary, CpaAccountsData } from './types'
+import type { ApiResponse, DashboardData, ResultsData, ControlData, LogsData, SecuritySummary } from './types'
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
@@ -67,60 +67,6 @@ export const api = {
   // Results
   getResults: () =>
     request<ApiResponse<ResultsData>>('/api/results').then(r => r.data!),
-
-  // CPA
-  getCpaOverview: () =>
-    request<ApiResponse>('/api/cpa/overview').then(r => r.data),
-
-  getCpaAccounts: (params: Record<string, string | number | boolean>) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== '' && v !== undefined) sp.set(k, String(v))
-    })
-    return request<ApiResponse<CpaAccountsData>>(`/api/cpa/accounts?${sp.toString()}`).then(r => r.data!)
-  },
-
-  testCpa: () =>
-    request<ApiResponse>('/api/cpa/test', { method: 'POST' }),
-
-  syncCpa: (limit: number) =>
-    request<ApiResponse>('/api/cpa/sync', {
-      method: 'POST',
-      body: JSON.stringify({ limit }),
-    }),
-
-  startHealthTask: (payload: { names?: string[]; cleanup?: boolean }) =>
-    request<ApiResponse>('/api/cpa/health/start', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  getHealthStatus: () =>
-    request<ApiResponse>('/api/cpa/health/status'),
-
-  cleanupHealth: (names?: string[]) =>
-    request<ApiResponse>('/api/cpa/health/cleanup', {
-      method: 'POST',
-      body: JSON.stringify({ names }),
-    }),
-
-  deleteCpaAccounts: (names: string[]) =>
-    request<ApiResponse>('/api/cpa/accounts/delete', {
-      method: 'POST',
-      body: JSON.stringify({ names }),
-    }),
-
-  toggleCpaAccounts: (names: string[], disabled: boolean) =>
-    request<ApiResponse>('/api/cpa/accounts/toggle', {
-      method: 'POST',
-      body: JSON.stringify({ names, disabled }),
-    }),
-
-  updateCpaAccountFields: (name: string, priority?: number, note?: string) =>
-    request<ApiResponse>('/api/cpa/accounts/fields', {
-      method: 'POST',
-      body: JSON.stringify({ name, priority, note }),
-    }),
 
   // Security
   getSecurity: () =>

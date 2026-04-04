@@ -2,7 +2,7 @@ import { type PropsWithChildren, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Settings as SettingsIcon, Activity, Shield, Play,
-  ScrollText, FileCheck, Sun, Moon, Server
+  ScrollText, FileCheck, Sun, Moon
 } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme'
 import type { ReactNode } from 'react'
@@ -17,7 +17,6 @@ type NavDef = {
 const navDefs: NavDef[] = [
   { to: '/', label: '总览', icon: <LayoutDashboard className="size-[18px]" />, end: true },
   { to: '/config', label: '配置中心', icon: <SettingsIcon className="size-[18px]" /> },
-  { to: '/cpa', label: 'CPA管理', icon: <Server className="size-[18px]" /> },
   { to: '/security', label: '安全设置', icon: <Shield className="size-[18px]" />, end: true },
   { to: '/control', label: '运行控制', icon: <Play className="size-[18px]" />, end: true },
   { to: '/logs', label: '日志监控', icon: <ScrollText className="size-[18px]" />, end: true },
