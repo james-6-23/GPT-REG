@@ -8,7 +8,7 @@ import { useToast } from '../hooks/useToast'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock, Radio, HardDrive } from 'lucide-react'
+import { Play, Square, RotateCcw, Activity, Cpu, Trophy, XCircle, Clock, Radio, HardDrive, Users } from 'lucide-react'
 import type { ControlData } from '../types'
 
 export default function Control() {
@@ -96,6 +96,7 @@ export default function Control() {
                   <InfoBlock icon={<Cpu className="size-5" />} iconBg="bg-blue-500/10 text-blue-500" label="阶段" value={data.phase} />
                   <InfoBlock icon={<Clock className="size-5" />} iconBg="bg-amber-500/10 text-amber-500" label="启动时间" value={data.started_at || '—'} />
                   <InfoBlock icon={<Activity className="size-5" />} iconBg="bg-purple-500/10 text-purple-500" label="PID" value={data.pid ? String(data.pid) : '—'} />
+                  <InfoBlock icon={<Users className="size-5" />} iconBg="bg-indigo-500/10 text-indigo-500" label="并发数" value={`${(data as Record<string, unknown>).workers_active ?? 0} / ${(data as Record<string, unknown>).workers_target ?? 0}`} />
                   <InfoBlock icon={<Trophy className="size-5" />} iconBg="bg-emerald-500/10 text-emerald-500" label="成功" value={String(data.successes)} />
                   <InfoBlock icon={<XCircle className="size-5" />} iconBg="bg-red-500/10 text-red-500" label="失败" value={String(data.failures)} />
                   <InfoBlock icon={<HardDrive className="size-5" />} iconBg="bg-cyan-500/10 text-cyan-500" label="内存" value={
