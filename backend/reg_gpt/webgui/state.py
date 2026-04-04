@@ -80,7 +80,56 @@ def write_config_section(section: str, data: Dict[str, Any]) -> Dict[str, Any]:
     if key == "basic":
         payload = {"webui": (data or {}).get("webui") or {}}
     elif key == "email":
-        payload = {"email": (data or {}).get("email") or {}}
+        email_data = (data or {}).get("email") or {}
+        # 同步顶层字段到 entries（前端编辑的是顶层字段，需要回写到 entries）
+        providers = email_data.get("providers")
+        if isinstance(providers, dict):
+            for pname, pdata in providers.items():
+                if not isinstance(pdata, dict):
+                    continue
+                entries = pdata.get("entries")
+                if not isinstance(entries, list) or not entries:
+                    continue
+                ptype = str(pdata.get("type") or pname).strip().lower()
+                parent_enabled = bool(pdata.get("enabled"))
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    # 同步 enabled
+                    if parent_enabled and not entry.get("enabled"):
+                        entry["enabled"] = True
+                    # 同步顶层编辑的字段到 entry
+                    if ptype == "tempmail_lol":
+                        for fk in ("api_base", "api_key", "domain"):
+                            if pdata.get(fk) is not None:
+                                entry.setdefault(fk, pdata[fk])
+                                if pdata[fk]:
+                                    entry[fk] = pdata[fk]
+                    elif ptype == "mailapi_pool":
+                        for fk in ("api_base", "api_bases", "api_key", "domains"):
+                            if pdata.get(fk) is not None:
+                                entry.setdefault(fk, pdata[fk])
+                                if pdata[fk]:
+                                    entry[fk] = pdata[fk]
+                    elif ptype == "duckmail":
+                        for fk in ("api_base", "bearer", "email_domain"):
+                            if pdata.get(fk) is not None:
+                                entry.setdefault(fk, pdata[fk])
+                                if pdata[fk]:
+                                    entry[fk] = pdata[fk]
+                    elif ptype == "lamail":
+                        for fk in ("api_base", "api_key", "domain"):
+                            if pdata.get(fk) is not None:
+                                entry.setdefault(fk, pdata[fk])
+                                if pdata[fk]:
+                                    entry[fk] = pdata[fk]
+                    elif ptype == "cloudflare":
+                        for fk in ("worker_url", "email_domain", "api_secret"):
+                            if pdata.get(fk) is not None:
+                                entry.setdefault(fk, pdata[fk])
+                                if pdata[fk]:
+                                    entry[fk] = pdata[fk]
+        payload = {"email": email_data}
     elif key == "email-domains":
         email_data = (data or {}).get("email") or {}
         payload = {

@@ -610,6 +610,11 @@ def _normalize_email_provider(name: str, data: Dict[str, Any] | None) -> Dict[st
         if not entries:
             entries = _entries_from_legacy_provider(provider_type, raw, defaults)
 
+        # 父级启用但所有 entries 都禁用时，自动启用第一个 entry
+        parent_enabled = normalized['enabled']
+        if parent_enabled and entries and not any(e.get('enabled') for e in entries):
+            entries[0]['enabled'] = True
+
         normalized['entries'] = entries
         if entries:
             normalized.update(_derive_provider_fields_from_entry(provider_type, entries[0]))
