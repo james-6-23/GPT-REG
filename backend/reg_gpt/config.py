@@ -375,6 +375,9 @@ def _ensure_config_file() -> None:
 def _is_retryable_config_io_error(exc: Exception) -> bool:
     if isinstance(exc, PermissionError):
         return True
+    # EBUSY (errno 16): Docker 单文件 bind mount 时 os.replace() 无法原子替换挂载点
+    if isinstance(exc, OSError) and getattr(exc, 'errno', None) == 16:
+        return True
     winerror = getattr(exc, 'winerror', None)
     return winerror == 5
 
