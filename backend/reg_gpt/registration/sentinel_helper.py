@@ -66,9 +66,9 @@ def preload_sentinel_tokens(ctx: RegistrationContext, flows: Optional[List[str]]
             page = context.new_page()
 
             page.goto(FRAME_URL, wait_until="load", timeout=60000)
-            ctx.info(f"{ctx.tag}等待 Sentinel SDK 环境初始化 (12s)...")
-            page.wait_for_timeout(12000)
+            ctx.info(f"{ctx.tag}等待 Sentinel SDK 加载...")
             page.wait_for_function("() => !!window.SentinelSDK", timeout=30000)
+            ctx.info(f"{ctx.tag}Sentinel SDK 已就绪")
 
             result = page.evaluate(
                 """async (flows) => {
