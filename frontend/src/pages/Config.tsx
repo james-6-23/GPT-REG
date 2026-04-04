@@ -119,6 +119,18 @@ function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange
   const sp = (name: string, field: string, v: unknown) => s(`email.providers.${name}.${field}`, v)
   const pg = (name: string, field: string) => get(data, `email.providers.${name}.${field}`)
 
+  const toggleProvider = (name: string) => {
+    const newVal = !pg(name, 'enabled')
+    let draft = set(data, `email.providers.${name}.enabled`, newVal)
+    // 同步 entries 的 enabled 状态
+    const entries = get(draft, `email.providers.${name}.entries`)
+    if (Array.isArray(entries)) {
+      const updated = entries.map((e: Record<string, unknown>) => ({ ...e, enabled: newVal }))
+      draft = set(draft, `email.providers.${name}.entries`, updated)
+    }
+    onChange(draft)
+  }
+
   const PROVIDER_LABELS: Record<string, string> = {
     mailapi_pool: '域名池邮箱',
     cfmail: 'CFMail 账号池',
@@ -161,7 +173,7 @@ function EmailForm({ data, onChange }: { data: Record<string, unknown>; onChange
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold">{label}</h3>
               <button
-                onClick={() => sp(name, 'enabled', !pg(name, 'enabled'))}
+                onClick={() => toggleProvider(name)}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                   pg(name, 'enabled') ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'
                 }`}
