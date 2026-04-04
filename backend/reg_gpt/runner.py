@@ -84,6 +84,9 @@ def run_sequential(
             break
 
         wait_time = random.randint(sleep_min, sleep_max)
+        # 失败时缩短等待（取配置最小值和3秒中的较大者）
+        if not token_json:
+            wait_time = random.randint(max(1, min(sleep_min, 3)), max(3, sleep_min))
         update_worker_slot(1, status="sleeping", attempt=count)
         update_summary(workers_active=1, message=f"等待 {wait_time}s 后继续")
         console.print_info(f"等待 {wait_time}s ...")
@@ -109,12 +112,16 @@ def run_parallel(
     state = {"attempts": 0, "successes": 0, "stop": False}
     update_summary(workers_active=workers, phase="running", message="并行 Worker 已启动")
 
-    def task(wid: int, is_first: bool = False):
+    def task(wid: int, is_first: bool = False, prev_failed: bool = False):
         if not is_first:
             with lock:
                 if state["stop"]:
                     return None
-            wait_t = random.randint(sleep_min, sleep_max)
+            # 失败时缩短等待
+            if prev_failed:
+                wait_t = random.randint(max(1, min(sleep_min, 3)), max(3, sleep_min))
+            else:
+                wait_t = random.randint(sleep_min, sleep_max)
             update_worker_slot(wid, status="sleeping")
             console.wlog(wid, f"  {console.dim(f'W{wid}')}  {console.dim(f'等待 {wait_t}s...')}")
             time.sleep(wait_t)
@@ -139,7 +146,7 @@ def run_parallel(
     logger.notice(f"{console.cyan('[·]')} 并行 Worker: {console.cyan(str(workers))}")
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        pending = {pool.submit(task, slot, True) for slot in range(1, workers + 1)}
+        pending = {pool.submit(task, slot, True, False) for slot in range(1, workers + 1)}
 
         while pending:
             done, pending = fut_wait(pending, return_when=FIRST_COMPLETED)
@@ -197,7 +204,7 @@ def run_parallel(
                 with lock:
                     should_stop = state["stop"]
                 if not once and not should_stop:
-                    pending.add(pool.submit(task, wid, False))
+                    pending.add(pool.submit(task, wid, False, not token_json))
 
     on_parallel_stop(runtime_ctx)
 
