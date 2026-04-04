@@ -19,6 +19,13 @@ def _complete_signup(ctx) -> bool:
     final_path = ctx.final_path or ""
     need_otp = False
 
+    # 确保密码在所有分支都已生成（OAuth password/verify 需要用到）
+    if not ctx.reg_password:
+        import secrets as _secrets
+        import string as _string
+        base_pwd = _secrets.token_urlsafe(12)
+        ctx.reg_password = base_pwd + random.choice(_string.ascii_uppercase) + random.choice(_string.digits) + random.choice("!@#$%^&*")
+
     if "create-account/password" in final_path:
         ctx.info(f"{ctx.tag}检测到全新注册流程")
         time.sleep(random.uniform(0.5, 1.0))
